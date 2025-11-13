@@ -1,15 +1,18 @@
-# Dependências
+# Dependências do Node.js
 node_modules/
-.npm
-.pnpm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Cache
 .cache/
 *.pack
+.cache/
 
 # Ambiente
 .env
 .env.local
+.env.production
 
 # Logs
 *.log

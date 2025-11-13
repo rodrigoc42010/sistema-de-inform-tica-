@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
-  <rect width="200" height="60" fill="#2196f3" rx="5" ry="5"/>
-  <text x="20" y="40" font-family="Arial" font-size="24" font-weight="bold" fill="white">TechSupport</text>
-  <path d="M170 15 L180 30 L170 45" stroke="white" stroke-width="3" fill="none" stroke-linecap="round"/>
-</svg>
