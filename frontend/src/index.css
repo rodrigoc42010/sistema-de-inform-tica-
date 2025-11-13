@@ -1,0 +1,193 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  height: 100vh;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1976d2 0%, #9c27b0 100%);
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 450px;
+  padding: 30px;
+  border-radius: 12px;
+  background-color: #fff;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.auth-logo {
+  margin-bottom: 20px;
+}
+
+.auth-tabs {
+  margin-bottom: 20px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.auth-divider span {
+  padding: 0 10px;
+  color: #757575;
+  font-size: 14px;
+}
+
+.social-buttons {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.dashboard-container {
+  padding: 20px;
+}
+
+.ticket-card {
+  margin-bottom: 20px;
+  transition: transform 0.2s;
+}
+
+.ticket-card:hover {
+  transform: translateY(-5px);
+}
+
+.status-badge {
+  border-radius: 16px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-aberto {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.status-em_andamento {
+  background-color: #fff8e1;
+  color: #ffa000;
+}
+
+.status-aguardando_aprovacao {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.status-aprovado {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.status-reprovado {
+  background-color: #ffebee;
+  color: #d32f2f;
+}
+
+.status-concluido {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.status-cancelado {
+  background-color: #f5f5f5;
+  color: #757575;
+}
+
+.attachment-preview {
+  width: 100%;
+  max-width: 300px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.sidebar-ad {
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 8px;
+  background-color: #f5f5f5;
+}
+
+/* ===== Animações do Ranking de Técnicos ===== */
+.rank-panel {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: rankPanelFadeIn 600ms ease forwards;
+}
+
+@keyframes rankPanelFadeIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rank-item {
+  opacity: 0;
+  transform: translateX(12px);
+  animation: rankItemSlideIn 500ms ease forwards;
+}
+
+@keyframes rankItemSlideIn {
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.rank-empty {
+  opacity: 0;
+  animation: rankEmptyFadeIn 500ms ease forwards;
+}
+
+@keyframes rankEmptyFadeIn {
+  to {
+    opacity: 1;
+  }
+}
