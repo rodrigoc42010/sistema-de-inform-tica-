@@ -267,3 +267,6 @@ app.get('/', (req, res) => {
 app.get('/healthz', (req, res) => {
   res.status(200).json({ ok: true, time: new Date().toISOString() });
 });
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
+});
