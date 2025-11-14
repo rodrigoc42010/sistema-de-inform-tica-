@@ -218,9 +218,9 @@ function Register() {
     if (rawCep.length === 8) {
       (async () => {
         try {
-          const resp = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
+          const resp = await fetch(`/api/cep/${rawCep}`);
           const data = await resp.json();
-          if (!data || data.erro) return;
+          if (!data || data.error) return;
           setAddressData((prev) => ({
             ...prev,
             street: data.logradouro || prev.street,

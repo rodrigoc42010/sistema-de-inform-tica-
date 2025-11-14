@@ -191,6 +191,20 @@ app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/uploads', require('./routes/uploadRoutes'));
 app.use('/api/ads', require('./routes/adRoutes'));
 
+// Utilidades: CEP (proxy ViaCEP)
+app.get('/api/cep/:cep', async (req, res) => {
+  try {
+    const cep = String(req.params.cep || '').replace(/\D/g, '');
+    if (cep.length !== 8) return res.status(400).json({ error: 'CEP inválido' });
+    const resp = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    const data = await resp.json();
+    if (!data || data.erro) return res.status(404).json({ error: 'CEP não encontrado' });
+    return res.json(data);
+  } catch (e) {
+    return res.status(500).json({ error: 'Falha ao consultar CEP' });
+  }
+});
+
 // Rota de status
 app.get('/api/status', (req, res) => {
   res.status(200).json({

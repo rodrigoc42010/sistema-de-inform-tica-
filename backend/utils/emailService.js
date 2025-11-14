@@ -6,8 +6,7 @@ const createTransporter = () => {
   // Em produção, configurar com um provedor real como Gmail, SendGrid, etc.
   
   if (process.env.NODE_ENV === 'production') {
-    // Configuração para produção (exemplo com Gmail)
-    return nodemailer.createTransporter({
+    return nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
@@ -15,8 +14,7 @@ const createTransporter = () => {
       },
     });
   } else {
-    // Configuração para desenvolvimento (Ethereal Email)
-    return nodemailer.createTransporter({
+    return nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
       auth: {
