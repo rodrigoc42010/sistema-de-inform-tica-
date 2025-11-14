@@ -261,3 +261,9 @@ app.listen(PORT, '0.0.0.0', () => {
     console.warn(`Falha ao iniciar HTTPS: ${e.message}. Continuando apenas com HTTP.`.magenta);
   }
 })();
+app.get('/', (req, res) => {
+  res.status(200).send('OK');
+});
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ ok: true, time: new Date().toISOString() });
+});
