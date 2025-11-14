@@ -28,6 +28,13 @@ const hpp = require('hpp');
 // Carregar variáveis de ambiente
 dotenv.config();
 
+const missingVars = [];
+if (!process.env.JWT_SECRET) missingVars.push('JWT_SECRET');
+if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) missingVars.push('DATABASE_URL/POSTGRES_URL');
+if (missingVars.length) {
+  console.warn(`Variáveis de ambiente ausentes: ${missingVars.join(', ')}`);
+}
+
 // Conectar ao banco de dados (mas continuar mesmo se falhar)
 let dbConnected = false;
 connectDB().then((connected) => {

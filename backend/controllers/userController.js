@@ -85,6 +85,16 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   try {
+    const hasDb = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+    const hasJwt = !!process.env.JWT_SECRET;
+    if (!hasDb) {
+      res.status(500);
+      throw new Error('Configuração ausente: DATABASE_URL/POSTGRES_URL');
+    }
+    if (!hasJwt) {
+      res.status(500);
+      throw new Error('Configuração ausente: JWT_SECRET');
+    }
     const pool = getPool();
     const exists = await pool.query('SELECT id FROM users WHERE email=$1 LIMIT 1', [email]);
     if (exists.rowCount > 0) {
