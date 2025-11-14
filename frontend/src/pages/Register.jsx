@@ -793,6 +793,7 @@ function Register() {
                         variant="contained"
                         color="primary"
                         onClick={onSubmit}
+                        disabled={isLoading}
                       >
                         Registrar
                       </Button>
