@@ -41,7 +41,13 @@ app.disable('x-powered-by');
 // Em desenvolvimento, desativar 'trust proxy' para evitar validação do express-rate-limit.
 // Em produção, permitir configuração via variável de ambiente (lista ou booleano).
 const isProd = process.env.NODE_ENV === 'production';
-const trustProxyConfig = isProd ? (process.env.TRUST_PROXY || false) : false;
+const trustProxyEnv = process.env.TRUST_PROXY;
+let trustProxyConfig = false;
+if (isProd) {
+  if (trustProxyEnv === 'true') trustProxyConfig = 1;
+  else if (trustProxyEnv === 'false' || !trustProxyEnv) trustProxyConfig = false;
+  else trustProxyConfig = trustProxyEnv; // aceita 'loopback', '127.0.0.1', lista, etc.
+}
 app.set('trust proxy', trustProxyConfig);
 
 app.use((req, res, next) => { next(); });
