@@ -1,7 +1,4 @@
 const asyncHandler = require('express-async-handler');
-const Ad = require('../models/adModel');
-const Payment = require('../models/paymentModel');
-const mongoose = require('mongoose');
 const { getPool } = require('../db/pgClient');
 
 // Criar anúncio (técnico)
@@ -13,38 +10,17 @@ const createAd = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('Título e texto são obrigatórios');
   }
-  const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-  let ad;
-  if (usePg) {
-    const pool = getPool();
-    const inserted = await pool.query(
-      'INSERT INTO ads (title,text,link_url,media_url,audience,start_date,end_date,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [title, text, linkUrl || null, mediaUrl || null, audience || 'client', startDate || null, endDate || null, req.user.id || req.user._id]
-    );
-    ad = inserted.rows[0];
-  } else {
-    ad = await Ad.create({
-      title,
-      text,
-      linkUrl,
-      mediaUrl,
-      audience: audience || 'client',
-      startDate,
-      endDate,
-      createdBy: req.user._id,
-    });
-  }
+  const pool = getPool();
+  const inserted = await pool.query(
+    'INSERT INTO ads (title,text,link_url,media_url,audience,start_date,end_date,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+    [title, text, linkUrl || null, mediaUrl || null, audience || 'client', startDate || null, endDate || null, req.user.id || req.user._id]
+  );
+  const ad = inserted.rows[0];
 
   // Registrar taxa de postagem de anúncio (pendente), para administração/recebimento
   try {
     const feeAmount = Number(process.env.AD_POST_FEE_BRL || '4.9');
-    const usePg2 = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-    if (usePg2) {
-      const pool = getPool();
-      await pool.query('INSERT INTO payments (type, ad, technician, amount, currency, payment_method, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', ['ad_fee', ad.id || ad._id, req.user.id || req.user._id, feeAmount, 'BRL', 'admin_fee', 'pendente', `Taxa de postagem de anúncio: ${title}`]);
-    } else {
-      await Payment.create({ type: 'ad_fee', ad: ad._id, technician: req.user._id, amount: feeAmount, currency: 'BRL', paymentMethod: 'admin_fee', status: 'pendente', notes: `Taxa de postagem de anúncio: ${ad.title}` });
-    }
+    await pool.query('INSERT INTO payments (type, ad, technician, amount, currency, payment_method, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', ['ad_fee', ad.id, req.user.id || req.user._id, feeAmount, 'BRL', 'admin_fee', 'pendente', `Taxa de postagem de anúncio: ${title}`]);
   } catch (e) {
     // Não bloquear criação do anúncio por falha ao registrar pagamento
     console.warn('Falha ao registrar taxa de anúncio:', e?.message || e);
@@ -64,19 +40,12 @@ const listActiveAds = asyncHandler(async (req, res) => {
     return res.status(200).json([]);
   }
 
-  const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-  if (usePg) {
-    const pool = getPool();
-    const rs = await pool.query(
-      `SELECT * FROM ads WHERE active=TRUE AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) AND (audience='all' OR audience=$1) ORDER BY created_at DESC LIMIT 50`,
-      [role]
-    );
-    return res.status(200).json(rs.rows);
-  }
-  const query = { active: true, $or: [ { startDate: { $exists: false } }, { startDate: { $lte: now } } ] };
-  query.$and = [ { $or: [ { endDate: { $exists: false } }, { endDate: { $gte: now } } ] }, { $or: [ { audience: 'all' }, { audience: role } ] } ];
-  const ads = await Ad.find(query).sort({ createdAt: -1 }).limit(50);
-  res.status(200).json(ads);
+  const pool2 = getPool();
+  const rs2 = await pool2.query(
+    `SELECT * FROM ads WHERE active=TRUE AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) AND (audience='all' OR audience=$1) ORDER BY created_at DESC LIMIT 50`,
+    [role]
+  );
+  return res.status(200).json(rs2.rows);
 });
 
 // Listar anúncios públicos (sem autenticação)
@@ -84,18 +53,11 @@ const listActiveAds = asyncHandler(async (req, res) => {
 // Public
 const listPublicAds = asyncHandler(async (req, res) => {
   const now = new Date();
-  const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-  if (usePg) {
-    const pool = getPool();
-    const rs = await pool.query(
-      `SELECT * FROM ads WHERE active=TRUE AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) AND (audience='all' OR audience='client') ORDER BY created_at DESC LIMIT 50`
-    );
-    return res.status(200).json(rs.rows);
-  }
-  const query = { active: true, $or: [ { startDate: { $exists: false } }, { startDate: { $lte: now } } ] };
-  query.$and = [ { $or: [ { endDate: { $exists: false } }, { endDate: { $gte: now } } ] }, { $or: [ { audience: 'all' }, { audience: 'client' } ] } ];
-  const ads = await Ad.find(query).sort({ createdAt: -1 }).limit(50);
-  res.status(200).json(ads);
+  const pool3 = getPool();
+  const rs3 = await pool3.query(
+    `SELECT * FROM ads WHERE active=TRUE AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) AND (audience='all' OR audience='client') ORDER BY created_at DESC LIMIT 50`
+  );
+  return res.status(200).json(rs3.rows);
 });
 
 // Comprar remoção de anúncios (cliente)
@@ -114,11 +76,8 @@ const purchaseAdRemoval = asyncHandler(async (req, res) => {
   // Atualiza o campo adFreeUntil
   const base = req.user.adFreeUntil && new Date(req.user.adFreeUntil) > new Date() ? new Date(req.user.adFreeUntil) : new Date();
   base.setMonth(base.getMonth() + Number(months));
-
-  const User = require('../models/userModel');
-  const user = await User.findById(req.user._id);
-  user.adFreeUntil = base;
-  await user.save();
+  const pool4 = getPool();
+  await pool4.query('UPDATE users SET ad_free_until=$1 WHERE id=$2', [base, req.user.id || req.user._id]);
 
   // Integração Stripe (opcional; retorna clientSecret se configurado)
   let stripeInfo = null;
@@ -130,20 +89,11 @@ const purchaseAdRemoval = asyncHandler(async (req, res) => {
         amount: Math.round(amount * 100),
         currency: (process.env.STRIPE_CURRENCY || 'brl'),
         automatic_payment_methods: { enabled: true },
-        metadata: { userId: String(req.user._id), months: String(months) },
+        metadata: { userId: String(req.user.id || req.user._id), months: String(months) },
       });
       stripeInfo = { clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id };
       try {
-        await Payment.create({
-          type: 'ad_free',
-          client: req.user._id,
-          amount,
-          currency: process.env.STRIPE_CURRENCY || 'BRL',
-          paymentMethod: 'stripe',
-          status: 'processando',
-          paymentIntentId: paymentIntent.id,
-          notes: `Ad-free por ${months} mês(es)`,
-        });
+        await pool4.query('INSERT INTO payments (type, client, amount, currency, payment_method, status, payment_intent_id, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', ['ad_free', req.user.id || req.user._id, amount, process.env.STRIPE_CURRENCY || 'BRL', 'stripe', 'processando', paymentIntent.id, `Ad-free por ${months} mês(es)`]);
       } catch (e) {
         console.warn('Falha ao registrar pagamento Stripe:', e?.message || e);
       }
@@ -154,7 +104,7 @@ const purchaseAdRemoval = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     message: 'Remoção de anúncios ativada',
-    adFreeUntil: user.adFreeUntil,
+    adFreeUntil: base,
     amountCharged: amount,
     currency: 'BRL',
     stripe: stripeInfo,
@@ -169,14 +119,9 @@ const getMyAds = asyncHandler(async (req, res) => {
     res.status(403);
     throw new Error('Apenas técnicos podem listar seus anúncios');
   }
-  const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-  if (usePg) {
-    const pool = getPool();
-    const rs = await pool.query('SELECT * FROM ads WHERE created_by=$1 ORDER BY created_at DESC', [req.user.id || req.user._id]);
-    return res.status(200).json(rs.rows);
-  }
-  const ads = await Ad.find({ createdBy: req.user._id }).sort({ createdAt: -1 });
-  res.status(200).json(ads);
+  const pool5 = getPool();
+  const rs5 = await pool5.query('SELECT * FROM ads WHERE created_by=$1 ORDER BY created_at DESC', [req.user.id || req.user._id]);
+  return res.status(200).json(rs5.rows);
 });
 
 // Atualizar anúncio existente (somente autor)
@@ -188,19 +133,9 @@ const updateAd = asyncHandler(async (req, res) => {
     throw new Error('Apenas técnicos podem atualizar anúncios');
   }
   const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    res.status(400);
-    throw new Error('ID inválido');
-  }
-  const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-  let ad;
-  if (usePg) {
-    const pool = getPool();
-    const rs = await pool.query('SELECT * FROM ads WHERE id=$1 LIMIT 1', [id]);
-    ad = rs.rowCount ? rs.rows[0] : null;
-  } else {
-    ad = await Ad.findById(id);
-  }
+  const pool = getPool();
+  const rs = await pool.query('SELECT * FROM ads WHERE id=$1 LIMIT 1', [id]);
+  const ad = rs.rowCount ? rs.rows[0] : null;
   if (!ad) {
     res.status(404);
     throw new Error('Anúncio não encontrado');
@@ -217,22 +152,17 @@ const updateAd = asyncHandler(async (req, res) => {
     }
   });
 
-  if (usePg) {
-    const pool = getPool();
-    const fields = {};
-    allowedFields.forEach((f) => { if (f in req.body) fields[f] = req.body[f]; });
-    const colMap = { title: 'title', text: 'text', linkUrl: 'link_url', mediaUrl: 'media_url', audience: 'audience', startDate: 'start_date', endDate: 'end_date', active: 'active' };
-    const sets = [];
-    const values = [];
-    let idx = 1;
-    Object.keys(fields).forEach((k) => { sets.push(`${colMap[k]}=$${idx++}`); values.push(fields[k]); });
-    values.push(id);
-    if (sets.length) await pool.query(`UPDATE ads SET ${sets.join(', ')} WHERE id=$${idx}`, values);
-    const rsUpdated = await pool.query('SELECT * FROM ads WHERE id=$1', [id]);
-    return res.status(200).json(rsUpdated.rows[0]);
-  }
-  await ad.save();
-  res.status(200).json(ad);
+  const fields = {};
+  allowedFields.forEach((f) => { if (f in req.body) fields[f] = req.body[f]; });
+  const colMap = { title: 'title', text: 'text', linkUrl: 'link_url', mediaUrl: 'media_url', audience: 'audience', startDate: 'start_date', endDate: 'end_date', active: 'active' };
+  const sets = [];
+  const values = [];
+  let idx = 1;
+  Object.keys(fields).forEach((k) => { sets.push(`${colMap[k]}=$${idx++}`); values.push(fields[k]); });
+  values.push(id);
+  if (sets.length) await pool.query(`UPDATE ads SET ${sets.join(', ')} WHERE id=$${idx}`, values);
+  const rsUpdated = await pool.query('SELECT * FROM ads WHERE id=$1', [id]);
+  return res.status(200).json(rsUpdated.rows[0]);
 });
 
 module.exports = {

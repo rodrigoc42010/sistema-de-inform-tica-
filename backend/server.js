@@ -17,7 +17,6 @@ const connectDB = require('./config/db');
 // const GoogleStrategy = require('passport-google-oauth20').Strategy;
 // const MicrosoftStrategy = require('passport-microsoft').Strategy;
 const bcrypt = require('bcryptjs');
-const User = require('./models/userModel');
 
 // Segurança
 const helmet = require('helmet');
@@ -45,22 +44,7 @@ const isProd = process.env.NODE_ENV === 'production';
 const trustProxyConfig = isProd ? (process.env.TRUST_PROXY || false) : false;
 app.set('trust proxy', trustProxyConfig);
 
-// Cabeçalhos de segurança + compatibilidade com antivírus (uma única vez)
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  // CSP relaxada por compatibilidade; fortalecer em produção conforme front
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self' ws: wss:;"
-  );
-  // Headers específicos para Kaspersky
-  res.setHeader('X-Kaspersky-Safe', 'true');
-  res.setHeader('X-Antivirus-Safe', 'verified');
-  next();
-});
+app.use((req, res, next) => { next(); });
 
 // Endurecimento básico (antes de rotas)
 app.use(helmet());

@@ -1,7 +1,5 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
-const User = require('../models/userModel');
-const BlacklistedToken = require('../models/blacklistedTokenModel');
 const { getPool } = require('../db/pgClient');
 const isDemo = process.env.DEMO_MODE === 'true';
 
@@ -25,20 +23,11 @@ const protect = asyncHandler(async (req, res, next) => {
           res.status(401);
           throw new Error('Não autorizado, token inválido');
         }
-        const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-        if (usePg) {
-          const pool = getPool();
-          const rs = await pool.query('SELECT jti FROM blacklisted_tokens WHERE jti=$1 LIMIT 1', [decoded.jti]);
-          if (rs.rowCount) {
-            res.status(401);
-            throw new Error('Não autorizado, token revogado');
-          }
-        } else {
-          const blacklisted = await BlacklistedToken.findOne({ jti: decoded.jti });
-          if (blacklisted) {
-            res.status(401);
-            throw new Error('Não autorizado, token revogado');
-          }
+        const pool = getPool();
+        const rs = await pool.query('SELECT jti FROM blacklisted_tokens WHERE jti=$1 LIMIT 1', [decoded.jti]);
+        if (rs.rowCount) {
+          res.status(401);
+          throw new Error('Não autorizado, token revogado');
         }
       }
 
@@ -48,22 +37,13 @@ const protect = asyncHandler(async (req, res, next) => {
         // rotas que precisam de dados completos tratam fallback no controller
         req.user = { _id: decoded.id, role: 'client' };
       } else {
-        const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-        if (usePg) {
-          const pool = getPool();
-          const rs = await pool.query('SELECT id,name,email,role,phone,cpf_cnpj,address,bank_info,password_changed_at FROM users WHERE id=$1 LIMIT 1', [decoded.id]);
-          if (!rs.rowCount) {
-            res.status(401);
-            throw new Error('Não autorizado, usuário não encontrado');
-          }
-          req.user = rs.rows[0];
-        } else {
-          req.user = await User.findById(decoded.id).select('-password');
-          if (!req.user) {
-            res.status(401);
-            throw new Error('Não autorizado, usuário não encontrado');
-          }
+        const pool = getPool();
+        const rs = await pool.query('SELECT id,name,email,role,phone,cpf_cnpj,address,bank_info,password_changed_at FROM users WHERE id=$1 LIMIT 1', [decoded.id]);
+        if (!rs.rowCount) {
+          res.status(401);
+          throw new Error('Não autorizado, usuário não encontrado');
         }
+        req.user = rs.rows[0];
       }
 
       // Invalidar tokens emitidos antes de alteração de senha

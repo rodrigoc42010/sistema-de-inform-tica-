@@ -2,11 +2,8 @@ const asyncHandler = require('express-async-handler');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const User = require('../models/userModel');
-const Technician = require('../models/technicianModel');
 const { sendVerificationEmail } = require('../utils/emailService');
 const { logLogin, logFailedLogin, logLogout } = require('../middleware/auditLogger');
-const BlacklistedToken = require('../models/blacklistedTokenModel');
 const { getPool } = require('../db/pgClient');
 
 // Modo de demonstração (sem banco de dados)
@@ -88,109 +85,31 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   try {
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-    if (usePg) {
-      const pool = getPool();
-      const exists = await pool.query('SELECT id FROM users WHERE email=$1 LIMIT 1', [email]);
-      if (exists.rowCount > 0) {
-        res.status(400);
-        throw new Error('Usuário já cadastrado');
-      }
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      const verifyToken = crypto.randomBytes(32).toString('hex');
-      const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
-      const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const bankInfo = req.body.bankInfo ? JSON.stringify(req.body.bankInfo) : null;
-      const addressJson = address ? JSON.stringify(address) : null;
-      const inserted = await pool.query(
-        'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until',
-        [name, email, hashedPassword, role, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false]
-      );
-      const userRow = inserted.rows[0];
-      // Enviar e-mail de verificação
-      const emailResult = await sendVerificationEmail(email, name, verifyToken);
-      if (!emailResult.success) {
-        console.error('Erro ao enviar e-mail de verificação:', emailResult.error);
-      }
-      // Se técnico: criar registro
-      let loginId = null;
-      if (role === 'technician') {
-        loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-        const mappedServices = Array.isArray(technician?.services)
-          ? technician.services.map((s) => ({
-              name: s.name,
-              price: Number(s.initialPrice ?? s.price ?? 0) || 0,
-              estimatedTime: s.estimatedTime,
-              category: s.category,
-              isActive: s.isActive !== undefined ? s.isActive : true,
-            }))
-          : [];
-        const tData = {
-          user_id: userRow.id,
-          login_id: loginId,
-          services: mappedServices,
-          specialties: [],
-          pickup_service: !!technician?.pickupService,
-          pickup_fee: Number(technician?.pickupFee ?? 0) || 0,
-          payment_methods: Array.isArray(technician?.paymentMethods) ? technician.paymentMethods : [],
-        };
-        if (technician?.certifications) {
-          tData.specialties = technician.certifications
-            .split(',')
-            .map((cert) => cert.trim())
-            .filter(Boolean);
-        }
-        await pool.query(
-          'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-          [tData.user_id, tData.login_id, JSON.stringify(tData.services), JSON.stringify(tData.specialties), tData.pickup_service, tData.pickup_fee, JSON.stringify(tData.payment_methods)]
-        );
-      }
-      return res.status(201).json({
-        _id: userRow.id,
-        name: userRow.name,
-        email: userRow.email,
-        role: userRow.role,
-        phone: userRow.phone,
-        cpfCnpj: userRow.cpf_cnpj,
-        address: userRow.address || {},
-        bankInfo: userRow.bank_info || {},
-        emailVerified: userRow.email_verified,
-        adFreeUntil: userRow.ad_free_until || null,
-        isAdFree: userRow.ad_free_until ? new Date(userRow.ad_free_until) > new Date() : false,
-        ...(loginId ? { loginId } : {}),
-        token: generateToken(userRow.id),
-        message: 'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
-      });
-    }
-
-    // MongoDB (fallback)
-    // Verificar se o usuário já existe
-    const userExists = await User.findOne({ email });
-    if (userExists) {
+    const pool = getPool();
+    const exists = await pool.query('SELECT id FROM users WHERE email=$1 LIMIT 1', [email]);
+    if (exists.rowCount > 0) {
       res.status(400);
       throw new Error('Usuário já cadastrado');
     }
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    const user = await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      role,
-      phone,
-      cpfCnpj,
-      address,
-      bankInfo: req.body.bankInfo || undefined,
-    });
-    const verificationToken = user.generateEmailVerificationToken();
-    await user.save();
-    const emailResult = await sendVerificationEmail(email, name, verificationToken);
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
+    const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const bankInfo = req.body.bankInfo ? JSON.stringify(req.body.bankInfo) : null;
+    const addressJson = address ? JSON.stringify(address) : null;
+    const inserted = await pool.query(
+      'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until',
+      [name, email, hashedPassword, role, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false]
+    );
+    const userRow = inserted.rows[0];
+    const emailResult = await sendVerificationEmail(email, name, verifyToken);
     if (!emailResult.success) {
       console.error('Erro ao enviar e-mail de verificação:', emailResult.error);
     }
+    let loginId = null;
     if (role === 'technician') {
-      const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+      loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
       const mappedServices = Array.isArray(technician?.services)
         ? technician.services.map((s) => ({
             name: s.name,
@@ -200,43 +119,42 @@ const registerUser = asyncHandler(async (req, res) => {
             isActive: s.isActive !== undefined ? s.isActive : true,
           }))
         : [];
-      const technicianData = {
-        userId: user._id,
-        loginId,
+      const tData = {
+        user_id: userRow.id,
+        login_id: loginId,
         services: mappedServices,
         specialties: [],
-        pickupService: !!technician?.pickupService,
-        pickupFee: Number(technician?.pickupFee ?? 0) || 0,
-        paymentMethods: Array.isArray(technician?.paymentMethods) ? technician.paymentMethods : [],
+        pickup_service: !!technician?.pickupService,
+        pickup_fee: Number(technician?.pickupFee ?? 0) || 0,
+        payment_methods: Array.isArray(technician?.paymentMethods) ? technician.paymentMethods : [],
       };
       if (technician?.certifications) {
-        technicianData.specialties = technician.certifications
+        tData.specialties = technician.certifications
           .split(',')
           .map((cert) => cert.trim())
-          .filter((cert) => cert);
+          .filter(Boolean);
       }
-      await Technician.create(technicianData);
+      await pool.query(
+        'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [tData.user_id, tData.login_id, JSON.stringify(tData.services), JSON.stringify(tData.specialties), tData.pickup_service, tData.pickup_fee, JSON.stringify(tData.payment_methods)]
+      );
     }
-    if (user) {
-      res.status(201).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        cpfCnpj: user.cpfCnpj,
-        address: user.address,
-        bankInfo: user.bankInfo || {},
-        emailVerified: user.emailVerified,
-        adFreeUntil: user.adFreeUntil || null,
-        isAdFree: user.adFreeUntil ? new Date(user.adFreeUntil) > new Date() : false,
-        token: generateToken(user._id),
-        message: 'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
-      });
-    } else {
-      res.status(400);
-      throw new Error('Dados de usuário inválidos');
-    }
+    return res.status(201).json({
+      _id: userRow.id,
+      name: userRow.name,
+      email: userRow.email,
+      role: userRow.role,
+      phone: userRow.phone,
+      cpfCnpj: userRow.cpf_cnpj,
+      address: userRow.address || {},
+      bankInfo: userRow.bank_info || {},
+      emailVerified: userRow.email_verified,
+      adFreeUntil: userRow.ad_free_until || null,
+      isAdFree: userRow.ad_free_until ? new Date(userRow.ad_free_until) > new Date() : false,
+      ...(loginId ? { loginId } : {}),
+      token: generateToken(userRow.id),
+      message: 'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
+    });
   } catch (error) {
     console.error('Erro ao registrar usuário:', error?.message || error);
     // Se um status já foi definido anteriormente (ex.: 400 Usuário já cadastrado),
@@ -301,97 +219,42 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   try {
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-    if (usePg) {
-      const pool = getPool();
-      const rs = await pool.query('SELECT * FROM users WHERE email=$1 LIMIT 1', [email]);
-      if (rs.rowCount === 0) {
-        logFailedLogin(email, req, 'Usuário não encontrado');
-        res.status(401);
-        throw new Error('Credenciais inválidas');
-      }
-      const user = rs.rows[0];
-      if (user.lock_until && new Date(user.lock_until) > Date.now()) {
-        logFailedLogin(email, req, 'Conta bloqueada temporariamente');
-        res.status(423);
-        throw new Error('Conta bloqueada temporariamente. Tente novamente mais tarde.');
-      }
-      const passwordMatches = await bcrypt.compare(password, user.password);
-      if (!passwordMatches) {
-        const failed = (user.failed_login_attempts || 0) + 1;
-        const lockUntil = failed >= MAX_FAILED_ATTEMPTS ? new Date(Date.now() + LOCK_TIME_MINUTES * 60 * 1000) : null;
-        await pool.query('UPDATE users SET failed_login_attempts=$1, lock_until=$2 WHERE id=$3', [failed, lockUntil, user.id]);
-        logFailedLogin(email, req, lockUntil ? 'Muitas tentativas, conta bloqueada' : 'Credenciais inválidas');
-        res.status(401);
-        throw new Error('Credenciais inválidas');
-      }
-      await pool.query('UPDATE users SET failed_login_attempts=0, lock_until=NULL, last_login_at=NOW() WHERE id=$1', [user.id]);
-      logLogin({ id: user.id, email: user.email, name: user.name }, req);
-      return res.json({
-        _id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        cpfCnpj: user.cpf_cnpj,
-        address: user.address || {},
-        emailVerified: user.email_verified,
-        adFreeUntil: user.ad_free_until || null,
-        isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
-        token: generateToken(user.id),
-      });
-    }
-
-    // Mongo fallback
-    const user = await User.findOne({ email });
-
-    if (!user) {
+    const pool = getPool();
+    const rs = await pool.query('SELECT * FROM users WHERE email=$1 LIMIT 1', [email]);
+    if (rs.rowCount === 0) {
       logFailedLogin(email, req, 'Usuário não encontrado');
       res.status(401);
       throw new Error('Credenciais inválidas');
     }
-
-    if (user.lockUntil && user.lockUntil > Date.now()) {
+    const user = rs.rows[0];
+    if (user.lock_until && new Date(user.lock_until) > Date.now()) {
       logFailedLogin(email, req, 'Conta bloqueada temporariamente');
       res.status(423);
       throw new Error('Conta bloqueada temporariamente. Tente novamente mais tarde.');
     }
-
     const passwordMatches = await bcrypt.compare(password, user.password);
-
     if (!passwordMatches) {
-      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
-      if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-        user.lockUntil = new Date(Date.now() + LOCK_TIME_MINUTES * 60 * 1000);
-      }
-      await user.save();
-
-      logFailedLogin(email, req, user.lockUntil ? 'Muitas tentativas, conta bloqueada' : 'Credenciais inválidas');
+      const failed = (user.failed_login_attempts || 0) + 1;
+      const lockUntil = failed >= MAX_FAILED_ATTEMPTS ? new Date(Date.now() + LOCK_TIME_MINUTES * 60 * 1000) : null;
+      await pool.query('UPDATE users SET failed_login_attempts=$1, lock_until=$2 WHERE id=$3', [failed, lockUntil, user.id]);
+      logFailedLogin(email, req, lockUntil ? 'Muitas tentativas, conta bloqueada' : 'Credenciais inválidas');
       res.status(401);
       throw new Error('Credenciais inválidas');
     }
-
-    // Sucesso: resetar contador e atualizar último login
-    user.failedLoginAttempts = 0;
-    user.lockUntil = undefined;
-    user.lastLoginAt = new Date();
-    await user.save();
-
-    // Log de login bem-sucedido
-    logLogin({ id: user._id, email: user.email, name: user.name }, req);
-
-    res.json({
-      _id: user._id,
+    await pool.query('UPDATE users SET failed_login_attempts=0, lock_until=NULL, last_login_at=NOW() WHERE id=$1', [user.id]);
+    logLogin({ id: user.id, email: user.email, name: user.name }, req);
+    return res.json({
+      _id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       phone: user.phone,
-      cpfCnpj: user.cpfCnpj,
-      address: user.address,
-      emailVerified: user.emailVerified,
-      adFreeUntil: user.adFreeUntil || null,
-      isAdFree: user.adFreeUntil ? new Date(user.adFreeUntil) > new Date() : false,
-      token: generateToken(user._id),
+      cpfCnpj: user.cpf_cnpj,
+      address: user.address || {},
+      emailVerified: user.email_verified,
+      adFreeUntil: user.ad_free_until || null,
+      isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
+      token: generateToken(user.id),
     });
   } catch (error) {
     console.error('Erro ao fazer login:', error?.message || error);
@@ -528,73 +391,8 @@ const loginTechnician = asyncHandler(async (req, res) => {
         token: generateToken(user.id),
       });
     }
-    let user = null;
-    let technician = null;
-
-    if (loginId) {
-      // Buscar técnico pelo loginId
-      technician = await Technician.findOne({ loginId }).populate('userId');
-      if (!technician || !technician.userId) {
-        logFailedLogin(`LoginID: ${loginId}`, req, 'ID de login não encontrado');
-        res.status(401);
-        throw new Error('Credenciais inválidas');
-      }
-      user = technician.userId;
-    } else if (cpfCnpj) {
-      // Buscar usuário por CPF/CNPJ e garantir que seja técnico
-      user = await User.findOne({ cpfCnpj });
-      if (!user || user.role !== 'technician') {
-        logFailedLogin(`CPF/CNPJ: ${cpfCnpj}`, req, !user ? 'Usuário não encontrado' : 'Usuário não é técnico');
-        res.status(401);
-        throw new Error('Credenciais inválidas');
-      }
-      technician = await Technician.findOne({ userId: user._id });
-    }
-
-    if (user.lockUntil && user.lockUntil > Date.now()) {
-      const who = loginId ? `${user.email} (LoginID: ${loginId})` : `${user.email} (CPF/CNPJ: ${cpfCnpj})`;
-      logFailedLogin(who, req, 'Conta bloqueada temporariamente');
-      res.status(423);
-      throw new Error('Conta bloqueada temporariamente. Tente novamente mais tarde.');
-    }
-
-    const passwordMatches = await bcrypt.compare(password, user.password);
-
-    if (!passwordMatches) {
-      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
-      if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
-        user.lockUntil = new Date(Date.now() + LOCK_TIME_MINUTES * 60 * 1000);
-      }
-      await user.save();
-
-      const who = loginId ? `${user.email} (LoginID: ${loginId})` : `${user.email} (CPF/CNPJ: ${cpfCnpj})`;
-      logFailedLogin(who, req, user.lockUntil ? 'Muitas tentativas, conta bloqueada' : 'Senha incorreta');
-      res.status(401);
-      throw new Error('Credenciais inválidas');
-    }
-
-    // Sucesso: resetar contador e atualizar último login
-    user.failedLoginAttempts = 0;
-    user.lockUntil = undefined;
-    user.lastLoginAt = new Date();
-    await user.save();
-
-    logLogin({ id: user._id, email: user.email, name: user.name, loginId: technician?.loginId, cpfCnpj: user.cpfCnpj }, req);
-
-    res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      cpfCnpj: user.cpfCnpj,
-      address: user.address,
-      emailVerified: user.emailVerified,
-      loginId: technician?.loginId || null,
-      adFreeUntil: user.adFreeUntil || null,
-      isAdFree: user.adFreeUntil ? new Date(user.adFreeUntil) > new Date() : false,
-      token: generateToken(user._id),
-    });
+    res.status(500);
+    throw new Error('Banco de dados não configurado (Postgres obrigatório)');
   } catch (error) {
     console.error('Erro ao fazer login do técnico:', error?.message || error);
     if (!error.message.includes('Credenciais inválidas') && !error.message.includes('bloqueada')) {
@@ -620,131 +418,69 @@ const upgradeToTechnician = asyncHandler(async (req, res) => {
     throw new Error('Operação indisponível em modo demonstração');
   }
 
-  const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-  if (usePg) {
-    const pool = getPool();
-    const rsUser = await pool.query('SELECT * FROM users WHERE id=$1 LIMIT 1', [req.user._id || req.user.id]);
-    if (!rsUser.rowCount) {
-      res.status(404);
-      throw new Error('Usuário não encontrado');
-    }
-    const user = rsUser.rows[0];
-    if (user.role === 'technician') {
-      const rsTechExisting = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-      return res.status(200).json({
-        _id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        cpfCnpj: user.cpf_cnpj,
-        address: user.address || {},
-        bankInfo: user.bank_info || {},
-        loginId: rsTechExisting.rowCount ? rsTechExisting.rows[0].login_id : null,
-        adFreeUntil: user.ad_free_until || null,
-        isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
-        token: generateToken(user.id),
-      });
-    }
-    let rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-    if (!rsTech.rowCount) {
-      const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-      const incoming = Array.isArray(req.body.technician?.services) ? req.body.technician.services : [];
-      const services = incoming.map((s) => ({
-        name: s.name || s.title || 'Serviço',
-        description: s.description || s.details || '',
-        category: s.category || s.type || undefined,
-        price: Number(s.initialPrice != null ? s.initialPrice : s.price) || 0,
-        estimatedTime: s.estimatedTime || s.time || undefined,
-        isActive: s.isActive !== undefined ? s.isActive : true,
-      }));
-      const pickupService = !!req.body.technician?.pickupService;
-      const pickupFee = Number(req.body.technician?.pickupFee ?? 0) || 0;
-      const paymentMethods = Array.isArray(req.body.technician?.paymentMethods) ? req.body.technician.paymentMethods : [];
-      const specialties = req.body.technician?.certifications
-        ? req.body.technician.certifications.split(',').map((c) => c.trim()).filter(Boolean)
-        : [];
-      await pool.query(
-        'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [user.id, loginId, JSON.stringify(services), JSON.stringify(specialties), pickupService, pickupFee, JSON.stringify(paymentMethods)]
-      );
-      rsTech = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-    }
-    await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', user.id]);
-    const loginId = rsTech.rowCount ? rsTech.rows[0].login_id : null;
+  const pool = getPool();
+  const rsUser = await pool.query('SELECT * FROM users WHERE id=$1 LIMIT 1', [req.user._id || req.user.id]);
+  if (!rsUser.rowCount) {
+    res.status(404);
+    throw new Error('Usuário não encontrado');
+  }
+  const user = rsUser.rows[0];
+  if (user.role === 'technician') {
+    const rsTechExisting = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
     return res.status(200).json({
       _id: user.id,
       name: user.name,
       email: user.email,
-      role: 'technician',
+      role: user.role,
       phone: user.phone,
       cpfCnpj: user.cpf_cnpj,
       address: user.address || {},
       bankInfo: user.bank_info || {},
-      loginId,
+      loginId: rsTechExisting.rowCount ? rsTechExisting.rows[0].login_id : null,
       adFreeUntil: user.ad_free_until || null,
       isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
       token: generateToken(user.id),
     });
   }
-  const user = await User.findById(req.user._id);
-  if (!user) {
-    res.status(404);
-    throw new Error('Usuário não encontrado');
-  }
-  if (user.role === 'technician') {
-    const existingTech = await Technician.findOne({ userId: user._id });
-    return res.status(200).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      cpfCnpj: user.cpfCnpj,
-      address: user.address,
-      bankInfo: user.bankInfo || {},
-      loginId: existingTech?.loginId || null,
-      adFreeUntil: user.adFreeUntil || null,
-      isAdFree: user.adFreeUntil ? new Date(user.adFreeUntil) > new Date() : false,
-      token: generateToken(user._id),
-    });
-  }
-  let technician = await Technician.findOne({ userId: user._id });
-  if (!technician) {
+  let rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
+  if (!rsTech.rowCount) {
     const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-    const incomingServices = Array.isArray(req.body.technician?.services) ? req.body.technician.services : [];
-    const mappedServices = incomingServices.map((s) => ({
+    const incoming = Array.isArray(req.body.technician?.services) ? req.body.technician.services : [];
+    const services = incoming.map((s) => ({
       name: s.name || s.title || 'Serviço',
       description: s.description || s.details || '',
       category: s.category || s.type || undefined,
-      price: Number(s.initialPrice !== undefined && s.initialPrice !== null ? s.initialPrice : s.price) || 0,
+      price: Number(s.initialPrice != null ? s.initialPrice : s.price) || 0,
       estimatedTime: s.estimatedTime || s.time || undefined,
       isActive: s.isActive !== undefined ? s.isActive : true,
     }));
     const pickupService = !!req.body.technician?.pickupService;
     const pickupFee = Number(req.body.technician?.pickupFee ?? 0) || 0;
     const paymentMethods = Array.isArray(req.body.technician?.paymentMethods) ? req.body.technician.paymentMethods : [];
-    const tData = { userId: user._id, loginId, services: mappedServices, specialties: [], pickupService, pickupFee, paymentMethods };
-    if (req.body.technician?.certifications) {
-      tData.specialties = req.body.technician.certifications.split(',').map((c) => c.trim()).filter(Boolean);
-    }
-    technician = await Technician.create(tData);
+    const specialties = req.body.technician?.certifications
+      ? req.body.technician.certifications.split(',').map((c) => c.trim()).filter(Boolean)
+      : [];
+    await pool.query(
+      'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [user.id, loginId, JSON.stringify(services), JSON.stringify(specialties), pickupService, pickupFee, JSON.stringify(paymentMethods)]
+    );
+    rsTech = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
   }
-  user.role = 'technician';
-  await user.save();
+  await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', user.id]);
+  const loginId = rsTech.rowCount ? rsTech.rows[0].login_id : null;
   return res.status(200).json({
-    _id: user._id,
+    _id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: 'technician',
     phone: user.phone,
-    cpfCnpj: user.cpfCnpj,
-    address: user.address,
-    bankInfo: user.bankInfo || {},
-    loginId: technician.loginId,
-    adFreeUntil: user.adFreeUntil || null,
-    isAdFree: user.adFreeUntil ? new Date(user.adFreeUntil) > new Date() : false,
-    token: generateToken(user._id),
+    cpfCnpj: user.cpf_cnpj,
+    address: user.address || {},
+    bankInfo: user.bank_info || {},
+    loginId,
+    adFreeUntil: user.ad_free_until || null,
+    isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
+    token: generateToken(user.id),
   });
 });
 
@@ -752,86 +488,84 @@ const upgradeToTechnician = asyncHandler(async (req, res) => {
 // @route   GET /api/users/me
 // @access  Private
 const getMe = asyncHandler(async (req, res) => {
-  try {
-  const user = await User.findById(req.user._id).select('-password');
-    
-    // Se for um técnico, obter dados adicionais
-    if (user.role === 'technician') {
-      const technician = await Technician.findOne({ userId: user._id });
-      res.status(200).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        cpfCnpj: user.cpfCnpj,
-        address: user.address,
-        bankInfo: user.bankInfo || {},
-        services: technician?.services || [],
-        specialties: technician?.specialties || [],
-        pickupService: technician?.pickupService || false,
-        pickupFee: technician?.pickupFee || 0,
-        paymentMethods: technician?.paymentMethods || [],
-        adFreeUntil: user.adFreeUntil || null,
-        isAdFree: user.adFreeUntil ? new Date(user.adFreeUntil) > new Date() : false,
-      });
-    } else {
-      res.status(200).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        cpfCnpj: user.cpfCnpj,
-        address: user.address,
-        bankInfo: user.bankInfo || {},
-        adFreeUntil: user.adFreeUntil || null,
-        isAdFree: user.adFreeUntil ? new Date(user.adFreeUntil) > new Date() : false,
-      });
-    }
-  } catch (error) {
-    // Modo de demonstração (sem banco de dados)
-    console.log('Usando modo de demonstração para getMe'.yellow);
-    
-    // Encontrar usuário demo pelo ID
+  const isDemo = process.env.DEMO_MODE === 'true';
+  if (isDemo) {
     const demoUser = demoUsers.find(u => u._id === req.user._id);
-    
-    if (demoUser) {
-      if (demoUser.role === 'technician') {
-        res.status(200).json({
-          _id: demoUser._id,
-          name: demoUser.name,
-          email: demoUser.email,
-          role: demoUser.role,
-          phone: demoUser.phone,
-          cpfCnpj: demoUser.cpfCnpj,
-          address: demoUser.address,
-          services: demoUser.services || [],
-          specialties: [],
-          pickupService: false,
-          pickupFee: 0,
-          paymentMethods: [],
-          adFreeUntil: demoUser.adFreeUntil || null,
-          isAdFree: false,
-        });
-      } else {
-        res.status(200).json({
-          _id: demoUser._id,
-          name: demoUser.name,
-          email: demoUser.email,
-          role: demoUser.role,
-          phone: demoUser.phone,
-          cpfCnpj: demoUser.cpfCnpj,
-          address: demoUser.address,
-          adFreeUntil: demoUser.adFreeUntil || null,
-          isAdFree: false,
-        });
-      }
-    } else {
+    if (!demoUser) {
       res.status(404);
       throw new Error('Usuário não encontrado (modo demo)');
     }
+    if (demoUser.role === 'technician') {
+      return res.status(200).json({
+        _id: demoUser._id,
+        name: demoUser.name,
+        email: demoUser.email,
+        role: demoUser.role,
+        phone: demoUser.phone,
+        cpfCnpj: demoUser.cpfCnpj,
+        address: demoUser.address,
+        services: demoUser.services || [],
+        specialties: [],
+        pickupService: false,
+        pickupFee: 0,
+        paymentMethods: [],
+        adFreeUntil: demoUser.adFreeUntil || null,
+        isAdFree: false,
+      });
+    }
+    return res.status(200).json({
+      _id: demoUser._id,
+      name: demoUser.name,
+      email: demoUser.email,
+      role: demoUser.role,
+      phone: demoUser.phone,
+      cpfCnpj: demoUser.cpfCnpj,
+      address: demoUser.address,
+      adFreeUntil: demoUser.adFreeUntil || null,
+      isAdFree: false,
+    });
   }
+  const pool = getPool();
+  const userId = req.user.id || req.user._id;
+  const rsUser = await pool.query('SELECT * FROM users WHERE id=$1 LIMIT 1', [userId]);
+  if (!rsUser.rowCount) {
+    res.status(404);
+    throw new Error('Usuário não encontrado');
+  }
+  const user = rsUser.rows[0];
+  if (user.role === 'technician') {
+    const rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
+    const tech = rsTech.rowCount ? rsTech.rows[0] : null;
+    return res.status(200).json({
+      _id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      cpfCnpj: user.cpf_cnpj,
+      address: user.address || {},
+      bankInfo: user.bank_info || {},
+      services: tech?.services || [],
+      specialties: tech?.specialties || [],
+      pickupService: tech?.pickup_service || false,
+      pickupFee: tech?.pickup_fee || 0,
+      paymentMethods: tech?.payment_methods || [],
+      adFreeUntil: user.ad_free_until || null,
+      isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
+    });
+  }
+  return res.status(200).json({
+    _id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    phone: user.phone,
+    cpfCnpj: user.cpf_cnpj,
+    address: user.address || {},
+    bankInfo: user.bank_info || {},
+    adFreeUntil: user.ad_free_until || null,
+    isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
+  });
 });
 
 // Gerar JWT
@@ -900,53 +634,6 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         token: generateToken(updatedUser.id),
       });
     }
-    const user = await User.findById(req.user._id);
-
-    if (user) {
-      user.name = req.body.name || user.name;
-      user.email = req.body.email || user.email;
-      user.phone = req.body.phone || user.phone;
-      user.cpfCnpj = req.body.cpfCnpj || user.cpfCnpj;
-      user.address = req.body.address || user.address;
-      // Atualizar informações bancárias quando fornecidas
-      if (req.body.bankInfo && typeof req.body.bankInfo === 'object') {
-        user.bankInfo = {
-          bank: req.body.bankInfo.bank || user.bankInfo?.bank,
-          agency: req.body.bankInfo.agency || user.bankInfo?.agency,
-          account: req.body.bankInfo.account || user.bankInfo?.account,
-          pixKey: req.body.bankInfo.pixKey || user.bankInfo?.pixKey,
-        };
-      }
-      if (typeof req.body.profileImage === 'string') {
-        user.profileImage = req.body.profileImage;
-      }
-
-      if (req.body.password) {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(req.body.password, salt);
-        user.passwordChangedAt = new Date();
-      }
-
-      const updatedUser = await user.save();
-
-      res.status(200).json({
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        phone: updatedUser.phone,
-        cpfCnpj: updatedUser.cpfCnpj,
-        address: updatedUser.address,
-        bankInfo: updatedUser.bankInfo || {},
-        profileImage: updatedUser.profileImage,
-        adFreeUntil: updatedUser.adFreeUntil || null,
-        isAdFree: updatedUser.adFreeUntil ? new Date(updatedUser.adFreeUntil) > new Date() : false,
-        token: generateToken(updatedUser._id),
-      });
-    } else {
-      res.status(404);
-      throw new Error('Usuário não encontrado');
-    }
   } catch (error) {
     // Modo de demonstração (sem banco de dados)
     console.log('Usando modo de demonstração para updateUserProfile'.yellow);
@@ -998,46 +685,17 @@ const updateUserProfile = asyncHandler(async (req, res) => {
 // @access  Public
 const verifyEmail = asyncHandler(async (req, res) => {
   try {
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-    if (usePg) {
-      const pool = getPool();
-      const { token } = req.params;
-      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-      const rs = await pool.query('SELECT id FROM users WHERE email_verification_token=$1 AND email_verification_expires > NOW() LIMIT 1', [hashedToken]);
-      if (!rs.rowCount) {
-        res.status(400);
-        throw new Error('Token de verificação inválido ou expirado');
-      }
-      const id = rs.rows[0].id;
-      await pool.query('UPDATE users SET email_verified=TRUE, email_verification_token=NULL, email_verification_expires=NULL WHERE id=$1', [id]);
-      return res.status(200).json({ message: 'E-mail verificado com sucesso!', emailVerified: true });
-    }
+    const pool = getPool();
     const { token } = req.params;
-    
-    // Hash do token recebido para comparar com o armazenado
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    
-    // Buscar usuário com o token válido e não expirado
-    const user = await User.findOne({
-      emailVerificationToken: hashedToken,
-      emailVerificationExpires: { $gt: Date.now() },
-    });
-    
-    if (!user) {
+    const rs = await pool.query('SELECT id FROM users WHERE email_verification_token=$1 AND email_verification_expires > NOW() LIMIT 1', [hashedToken]);
+    if (!rs.rowCount) {
       res.status(400);
       throw new Error('Token de verificação inválido ou expirado');
     }
-    
-    // Marcar e-mail como verificado
-    user.emailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpires = undefined;
-    await user.save();
-    
-    res.status(200).json({
-      message: 'E-mail verificado com sucesso!',
-      emailVerified: true,
-    });
+    const id = rs.rows[0].id;
+    await pool.query('UPDATE users SET email_verified=TRUE, email_verification_token=NULL, email_verification_expires=NULL WHERE id=$1', [id]);
+    return res.status(200).json({ message: 'E-mail verificado com sucesso!', emailVerified: true });
   } catch (error) {
     console.error('Erro ao verificar e-mail:', error);
     res.status(500);
@@ -1050,53 +708,23 @@ const verifyEmail = asyncHandler(async (req, res) => {
 // @access  Private
 const resendVerificationEmail = asyncHandler(async (req, res) => {
   try {
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-    if (usePg) {
-      const pool = getPool();
-      const rsUser = await pool.query('SELECT id,name,email FROM users WHERE id=$1 LIMIT 1', [req.user.id]);
-      if (!rsUser.rowCount) {
-        res.status(404);
-        throw new Error('Usuário não encontrado');
-      }
-      const user = rsUser.rows[0];
-      const verifyToken = crypto.randomBytes(32).toString('hex');
-      const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
-      const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await pool.query('UPDATE users SET email_verification_token=$1, email_verification_expires=$2 WHERE id=$3', [verifyHash, verifyExp, user.id]);
-      const emailResult = await sendVerificationEmail(user.email, user.name, verifyToken);
-      if (!emailResult.success) {
-        res.status(500);
-        throw new Error('Erro ao enviar e-mail de verificação');
-      }
-      return res.status(200).json({ message: 'E-mail de verificação reenviado com sucesso!' });
-    }
-    const user = await User.findById(req.user.id);
-    
-    if (!user) {
+    const pool = getPool();
+    const rsUser = await pool.query('SELECT id,name,email FROM users WHERE id=$1 LIMIT 1', [req.user.id || req.user._id]);
+    if (!rsUser.rowCount) {
       res.status(404);
       throw new Error('Usuário não encontrado');
     }
-    
-    if (user.emailVerified) {
-      res.status(400);
-      throw new Error('E-mail já foi verificado');
-    }
-    
-    // Gerar novo token de verificação
-    const verificationToken = user.generateEmailVerificationToken();
-    await user.save();
-    
-    // Enviar e-mail de verificação
-    const emailResult = await sendVerificationEmail(user.email, user.name, verificationToken);
-    
+    const user = rsUser.rows[0];
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
+    const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await pool.query('UPDATE users SET email_verification_token=$1, email_verification_expires=$2 WHERE id=$3', [verifyHash, verifyExp, user.id]);
+    const emailResult = await sendVerificationEmail(user.email, user.name, verifyToken);
     if (!emailResult.success) {
       res.status(500);
       throw new Error('Erro ao enviar e-mail de verificação');
     }
-    
-    res.status(200).json({
-      message: 'E-mail de verificação reenviado com sucesso!',
-    });
+    return res.status(200).json({ message: 'E-mail de verificação reenviado com sucesso!' });
   } catch (error) {
     console.error('Erro ao reenviar e-mail de verificação:', error);
     res.status(500);
@@ -1121,16 +749,6 @@ const forgotPassword = asyncHandler(async (req, res) => {
       }
       return res.status(200).json({ message: 'Instruções para redefinir a senha foram enviadas para o seu email' });
     }
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      res.status(404);
-      throw new Error('Usuário não encontrado');
-    }
-
-    // Em um sistema real, enviaríamos um email com um link para redefinir a senha
-    // Para este projeto, apenas retornamos uma mensagem de sucesso
-    res.status(200).json({ message: 'Instruções para redefinir a senha foram enviadas para o seu email' });
   } catch (error) {
     // Modo de demonstração (sem banco de dados)
     console.log('Usando modo de demonstração para forgotPassword'.yellow);
@@ -1166,8 +784,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     if (usePg) {
       const pool = getPool();
       await pool.query('INSERT INTO blacklisted_tokens (jti, user_id, expires_at, reason) VALUES ($1,$2,$3,$4) ON CONFLICT (jti) DO NOTHING', [jti, decoded.id, expiresAt, 'logout']);
-    } else {
-      await BlacklistedToken.create({ jti, user: decoded.id, expiresAt, reason: 'logout' });
     }
     if (req.user) {
       logLogout({ id: req.user._id || req.user.id, email: req.user.email }, req);
