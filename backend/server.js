@@ -129,7 +129,9 @@ try {
 
 // Auditoria de tentativas de autenticação (formato unificado)
 app.use((req, res, next) => {
-  const isAuthRoute = req.path.includes('/api/users/login') || req.path.includes('/api/users/register');
+  const isLogin = req.path.includes('/api/users/login') || req.path.includes('/api/users/technician-login');
+  const isRegister = req.path === '/api/users' && req.method === 'POST';
+  const isAuthRoute = isLogin || isRegister;
   if (!isAuthRoute) return next();
 
   const startedAt = new Date().toISOString();
@@ -142,7 +144,9 @@ app.use((req, res, next) => {
       const email = req.body && typeof req.body.email === 'string' ? req.body.email.slice(0, 200) : undefined;
       const entry = {
         timestamp: startedAt,
-        event: res.statusCode >= 200 && res.statusCode < 400 ? 'LOGIN' : 'LOGIN_FAILED',
+        event: isRegister
+          ? (res.statusCode >= 200 && res.statusCode < 400 ? 'REGISTER' : 'REGISTER_FAILED')
+          : (res.statusCode >= 200 && res.statusCode < 400 ? 'LOGIN' : 'LOGIN_FAILED'),
         user: { email: email || 'N/A' },
         connection: {
           ip: maskedIP,

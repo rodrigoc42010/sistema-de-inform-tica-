@@ -132,14 +132,13 @@ function Register() {
     }
 
     if (isSuccess || user) {
-      // Mostrar mensagem de verificação de e-mail se presente
       if (message && message.includes('Verifique seu e-mail')) {
         toast.success(message, { autoClose: 8000 });
       }
-      
-      if (user.role === 'client') {
+
+      if (user && user.role === 'client') {
         navigate('/client/dashboard');
-      } else if (user.role === 'technician') {
+      } else if (user && user.role === 'technician') {
         navigate('/technician/dashboard');
       }
     }
