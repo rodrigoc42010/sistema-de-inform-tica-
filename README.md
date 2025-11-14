@@ -6,11 +6,11 @@ Sistema completo para gerenciamento de chamados técnicos na área de informáti
 ## Tecnologias Utilizadas
 - **Frontend**: React.js, Material-UI
 - **Backend**: Node.js, Express
-- **Banco de Dados**: MongoDB
+- **Banco de Dados**: MongoDB (dev) e PostgreSQL (prod opcional)
 - **Autenticação**: JWT
 - **Geolocalização**: Google Maps API
 - **Upload de Arquivos**: Multer, AWS S3
-- **Pagamentos**: Stripe API
+- **Pagamentos**: Stripe API (produção)
 
 ## Funcionalidades Principais
 - Login e registro de usuários (clientes e técnicos)
@@ -36,14 +36,27 @@ npm install
 
 ## Execução
 ```bash
-# Executar o backend
-cd backend
-npm start
+# Executar o backend (dev com Mongo)
+npm run server
 
 # Executar o frontend
-cd frontend
-npm start
+npm run client
 ```
+
+## Deploy no Render (PostgreSQL)
+- Defina as variáveis de ambiente (exemplo em `.env.example`):
+  - `NODE_ENV=production`
+  - `DB_TYPE=postgres`
+  - `DATABASE_URL` (string de conexão do Postgres)
+  - `POSTGRES_SSL=true`
+  - `JWT_SECRET` (chave segura)
+  - `ALLOWED_ORIGINS` com os domínios do frontend/back
+  - `STRIPE_SECRET_KEY` com a chave de produção
+  - `REACT_APP_API_BASE_URL` no frontend apontando para o backend
+
+- Na inicialização, o backend cria automaticamente as tabelas necessárias no Postgres (users, technicians, tickets, ads, payments, blacklisted_tokens).
+
+- Observação: a persistência principal do código atual usa MongoDB. O suporte a Postgres criado garante estrutura de tabelas para migração/relatórios e pode evoluir para persistência completa.
 
 ## Estrutura do Projeto
 - `/frontend`: Código fonte do frontend em React

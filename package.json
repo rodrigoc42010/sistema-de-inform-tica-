@@ -45,6 +45,7 @@
     "passport-microsoft": "^1.0.0",
     "selfsigned": "^3.0.1",
     "stripe": "^12.0.0",
+    "pg": "^8.11.3",
     "xss": "^1.0.15",
     "xss-clean": "^0.1.1"
   },
