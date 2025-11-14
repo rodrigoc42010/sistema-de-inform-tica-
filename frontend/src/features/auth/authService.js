@@ -2,16 +2,13 @@ import axios from '../../api/axios';
 
 // Registrar usuário
 const register = async (userData) => {
-  const response = await axios.post('/api/users/', userData);
-
+  const response = await axios.post('/api/users', userData);
   if (response.data) {
     localStorage.setItem('user', JSON.stringify(response.data));
-    // Persistir token também em chave separada para consistência em fluxos diversos
     if (response.data.token) {
       localStorage.setItem('token', response.data.token);
     }
   }
-
   return response.data;
 };
 

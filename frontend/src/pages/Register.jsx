@@ -314,6 +314,7 @@ function Register() {
       userData.technician = technicianData;
     }
     
+    console.log('Submitting register payload', userData);
     dispatch(register(userData));
   };
 
