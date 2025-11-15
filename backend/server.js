@@ -26,7 +26,7 @@ const xss = require('xss');
 const hpp = require('hpp');
 
 // Carregar variáveis de ambiente
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const missingVars = [];
 if (!process.env.JWT_SECRET) missingVars.push('JWT_SECRET');
