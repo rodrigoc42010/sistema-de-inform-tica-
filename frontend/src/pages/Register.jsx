@@ -3,6 +3,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { register, reset } from '../features/auth/authSlice';
+import axios from '../api/axios';
+import { setUser } from '../features/auth/authSlice';
 
 // Material UI
 import {
@@ -297,6 +299,7 @@ function Register() {
     
     if (!termsAccepted) {
       toast.error('Você precisa aceitar os Termos de Uso e a Política de Privacidade');
+      setTermsOpen(true);
       return;
     }
 
@@ -320,12 +323,20 @@ function Register() {
     console.log('Submitting register payload', userData);
     dispatch(register(userData))
       .unwrap()
-      .then((u) => {
-        if (u?.role === 'technician') {
-          navigate('/technician/dashboard');
-        } else {
-          navigate('/client/dashboard');
-        }
+      .then(async (u) => {
+        try {
+          const token = u?.token || localStorage.getItem('token');
+          if (token) {
+            const me = await axios.get('/api/users/me', { headers: { Authorization: `Bearer ${token}` } });
+            if (me?.data) {
+              dispatch(setUser(me.data));
+              const role = me.data.role || u?.role;
+              navigate(role === 'technician' ? '/technician/dashboard' : '/client/dashboard');
+              return;
+            }
+          }
+        } catch {}
+        navigate(u?.role === 'technician' ? '/technician/dashboard' : '/client/dashboard');
       })
       .catch((err) => {
         toast.error(typeof err === 'string' ? err : (err?.message || 'Falha ao registrar'));
@@ -786,17 +797,10 @@ function Register() {
                   </Box>
                 )}
 
-                {activeStep === 3 && userType === 'technician' && (
-                  // Etapa 4: Confirmação (para técnicos)
-                  <Box textAlign="center">
-                    <Typography variant="h6" gutterBottom>
-                      Confirme seus dados para finalizar o registro
-                    </Typography>
-                    <Typography variant="body1">
+                {activeStep === 2 && userType === 'technician' && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body1" align="center">
                       Ao clicar em "Registrar", você concorda com nossos Termos de Uso e Política de Privacidade.
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                      Nota: Técnicos pagam uma taxa fixa para ter acesso ao sistema.
                     </Typography>
                     <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                       <FormControlLabel
