@@ -35,6 +35,8 @@ async function initPostgres() {
           email_verified BOOLEAN DEFAULT FALSE,
           email_verification_token TEXT,
           email_verification_expires TIMESTAMP,
+          terms_accepted BOOLEAN DEFAULT FALSE,
+          terms_accepted_at TIMESTAMP NULL,
           failed_login_attempts INTEGER DEFAULT 0,
           lock_until TIMESTAMP,
           last_login_at TIMESTAMP,
@@ -44,6 +46,9 @@ async function initPostgres() {
           updated_at TIMESTAMP DEFAULT NOW()
         );
       `);
+
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN DEFAULT FALSE');
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP NULL');
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS technicians (

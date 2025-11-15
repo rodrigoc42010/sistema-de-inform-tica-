@@ -31,6 +31,10 @@ import {
   Tabs,
   TextField,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Email as EmailIcon,
@@ -87,6 +91,8 @@ function Register() {
   const [userType, setUserType] = useState('client');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   
   // Dados básicos (etapa 1)
   const [basicData, setBasicData] = useState({
@@ -289,6 +295,11 @@ function Register() {
   const onSubmit = (e) => {
     e.preventDefault();
     
+    if (!termsAccepted) {
+      toast.error('Você precisa aceitar os Termos de Uso e a Política de Privacidade');
+      return;
+    }
+
     // Preparar dados para envio
     const userData = {
       name: basicData.name,
@@ -298,6 +309,7 @@ function Register() {
       phone: basicData.phone,
       cpfCnpj: basicData.cpfCnpj,
       address: addressData,
+      termsAccepted: true,
     };
     
     // Adicionar dados específicos para técnicos
@@ -762,8 +774,15 @@ function Register() {
                       Confirme seus dados para finalizar o registro
                     </Typography>
                     <Typography variant="body1">
-                      Ao clicar em "Registrar", você concorda com nossos termos de serviço e política de privacidade.
+                      Ao clicar em "Registrar", você concorda com nossos Termos de Uso e Política de Privacidade.
                     </Typography>
+                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                      <FormControlLabel
+                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
+                        label="Li e concordo com os Termos de Uso e a Política de Privacidade"
+                      />
+                      <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
+                    </Box>
                   </Box>
                 )}
 
@@ -774,11 +793,18 @@ function Register() {
                       Confirme seus dados para finalizar o registro
                     </Typography>
                     <Typography variant="body1">
-                      Ao clicar em "Registrar", você concorda com nossos termos de serviço e política de privacidade.
+                      Ao clicar em "Registrar", você concorda com nossos Termos de Uso e Política de Privacidade.
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                       Nota: Técnicos pagam uma taxa fixa para ter acesso ao sistema.
                     </Typography>
+                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                      <FormControlLabel
+                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
+                        label="Li e concordo com os Termos de Uso e a Política de Privacidade"
+                      />
+                      <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
+                    </Box>
                   </Box>
                 )}
 
@@ -826,6 +852,67 @@ function Register() {
           </CardContent>
         </Card>
       </Container>
+
+      <Dialog open={termsOpen} onClose={() => setTermsOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Termos de Uso e Política de Privacidade</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" paragraph>
+            Última atualização: 2025
+          </Typography>
+          <Typography variant="body1" paragraph>
+            Ao utilizar este sistema, o usuário declara que leu, compreendeu e concorda integralmente com os termos abaixo, bem como com a Política de Privacidade e com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 – LGPD).
+          </Typography>
+          <Typography variant="h6">1. Coleta e Uso de Informações</Typography>
+          <Typography variant="subtitle1">1.1 Informações Pessoais</Typography>
+          <Typography variant="body2" paragraph>
+            Nome completo; CPF ou CNPJ; Endereço, telefone e e-mail; Dados de acesso à conta.
+          </Typography>
+          <Typography variant="subtitle1">1.2 Informações Técnicas</Typography>
+          <Typography variant="body2" paragraph>
+            Dados do dispositivo utilizado; Endereço IP; Logs de acesso e atividade no sistema.
+          </Typography>
+          <Typography variant="h6">2. Permissões Necessárias</Typography>
+          <Typography variant="subtitle1">2.1 Geolocalização</Typography>
+          <Typography variant="body2" paragraph>
+            Utilizada para localizar técnicos próximos, verificar raio de atendimento e registrar localização de chamados (opcional).
+          </Typography>
+          <Typography variant="subtitle1">2.2 Câmera e Galeria</Typography>
+          <Typography variant="body2" paragraph>
+            Utilizada para anexar fotos de problemas técnicos, comprovação de serviço executado e envio de documentos, relatórios ou imagens relacionadas ao atendimento.
+          </Typography>
+          <Typography variant="subtitle1">2.3 Áudio (opcional)</Typography>
+          <Typography variant="body2" paragraph>
+            Utilizado apenas quando o usuário gravar ou enviar áudios relacionados a um chamado ou atendimento.
+          </Typography>
+          <Typography variant="subtitle1">2.4 Anexos</Typography>
+          <Typography variant="body2" paragraph>
+            O usuário poderá enviar fotos, vídeos, relatórios técnicos, PDFs, comprovantes de pagamento e registros relacionados ao atendimento. Todos os anexos são armazenados de forma segura, conforme a LGPD.
+          </Typography>
+          <Typography variant="h6">3. Compartilhamento de Informações</Typography>
+          <Typography variant="body2" paragraph>
+            Os dados poderão ser compartilhados exclusivamente para fins operacionais do sistema, como envio de informações ao técnico responsável pelo atendimento, notificações ao cliente, processamento de pagamentos e registros, exigências legais de autoridades competentes. O sistema não vende, negocia ou compartilha dados com terceiros para fins comerciais.
+          </Typography>
+          <Typography variant="h6">4. Proteção de Dados</Typography>
+          <Typography variant="body2" paragraph>
+            A plataforma segue integralmente os princípios da LGPD: finalidade, necessidade, transparência, segurança, consentimento e direitos do titular (acesso, correção, exclusão, portabilidade e revogação do consentimento).
+          </Typography>
+          <Typography variant="h6">5. Conduta do Usuário</Typography>
+          <Typography variant="body2" paragraph>
+            É proibido enviar arquivos ou informações falsas, tentar invadir, manipular ou prejudicar o sistema, utilizar a plataforma para fins ilegais, criar contas duplicadas para fraudes, fornecer dados incorretos ou de terceiros sem autorização.
+          </Typography>
+          <Typography variant="h6">6. Penalidades</Typography>
+          <Typography variant="body2" paragraph>
+            A violação destes termos ou da LGPD poderá resultar em suspensão temporária, bloqueio de acesso, banimento permanente, comunicação às autoridades competentes e exclusão ou bloqueio de dados, conforme legislação.
+          </Typography>
+          <Typography variant="h6">7. Consentimento Final</Typography>
+          <Typography variant="body2" paragraph>
+            Ao clicar em “Concordo”, o usuário confirma que leu e compreendeu todos os termos, autoriza o uso e tratamento dos dados conforme descrito, está de acordo com a LGPD e assume total responsabilidade pelas informações enviadas.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTermsOpen(false)}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -1,26 +1,25 @@
 const nodemailer = require('nodemailer');
 
-// Configuração do transporter de e-mail
-const createTransporter = () => {
-  // Para desenvolvimento, usar Ethereal Email (teste)
-  // Em produção, configurar com um provedor real como Gmail, SendGrid, etc.
-  
+const createTransporter = async () => {
   if (process.env.NODE_ENV === 'production') {
+    if (process.env.EMAIL_HOST) {
+      return nodemailer.createTransport({
+        host: process.env.EMAIL_HOST,
+        port: Number(process.env.EMAIL_PORT || 587),
+        secure: false,
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      });
+    }
     return nodemailer.createTransport({
       service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     });
   } else {
+    const testAccount = await nodemailer.createTestAccount();
     return nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
-      auth: {
-        user: 'ethereal.user@ethereal.email',
-        pass: 'ethereal.pass',
-      },
+      auth: { user: testAccount.user, pass: testAccount.pass },
     });
   }
 };
@@ -28,7 +27,7 @@ const createTransporter = () => {
 // Função para enviar e-mail de verificação
 const sendVerificationEmail = async (email, name, verificationToken) => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
     
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email/${verificationToken}`;
     

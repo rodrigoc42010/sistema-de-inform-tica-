@@ -17,12 +17,17 @@ const LOCK_TIME_MINUTES = 15;
 // @route   POST /api/users
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, phone, cpfCnpj, address, technician } = req.body;
+  const { name, email, password, role, phone, cpfCnpj, address, technician, termsAccepted } = req.body;
 
   // Validação
   if (!name || !email || !password || !role || !phone || !cpfCnpj) {
     res.status(400);
     throw new Error('Por favor, preencha todos os campos obrigatórios');
+  }
+
+  if (termsAccepted !== true) {
+    res.status(400);
+    throw new Error('É necessário aceitar os Termos de Uso e a Política de Privacidade');
   }
 
   // Fallback de modo demonstração
@@ -109,8 +114,8 @@ const registerUser = asyncHandler(async (req, res) => {
     const bankInfo = req.body.bankInfo ? JSON.stringify(req.body.bankInfo) : null;
     const addressJson = address ? JSON.stringify(address) : null;
     const inserted = await pool.query(
-      'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until',
-      [name, email, hashedPassword, role, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false]
+      'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified,terms_accepted,terms_accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until,terms_accepted,terms_accepted_at',
+      [name, email, hashedPassword, role, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false, true, new Date()]
     );
     const userRow = inserted.rows[0];
     const emailResult = await sendVerificationEmail(email, name, verifyToken);
