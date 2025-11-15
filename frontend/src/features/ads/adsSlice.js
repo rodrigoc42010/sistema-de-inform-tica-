@@ -13,7 +13,10 @@ const initialState = {
 export const fetchActiveAds = createAsyncThunk('ads/fetchActive', async (_, thunkAPI) => {
   try {
     const state = thunkAPI.getState();
-    const token = state.auth?.user?.token;
+    const token = state.auth?.user?.token || localStorage.getItem('token');
+    if (!token) {
+      return thunkAPI.rejectWithValue('Não autenticado');
+    }
     return await adsService.getActiveAds(token);
   } catch (error) {
     const message =

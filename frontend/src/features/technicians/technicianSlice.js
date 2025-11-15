@@ -16,7 +16,10 @@ export const getNearbyTechnicians = createAsyncThunk(
   'technicians/getNearby',
   async (location, thunkAPI) => {
     try {
-      const token = thunkAPI.getState().auth.user.token;
+      const token = thunkAPI.getState().auth.user?.token || localStorage.getItem('token');
+      if (!token) {
+        return thunkAPI.rejectWithValue('Não autenticado');
+      }
       return await technicianService.getNearbyTechnicians(location, token);
     } catch (error) {
       const message =
@@ -36,7 +39,10 @@ export const getTechnician = createAsyncThunk(
   'technicians/get',
   async (technicianId, thunkAPI) => {
     try {
-      const token = thunkAPI.getState().auth.user.token;
+      const token = thunkAPI.getState().auth.user?.token || localStorage.getItem('token');
+      if (!token) {
+        return thunkAPI.rejectWithValue('Não autenticado');
+      }
       return await technicianService.getTechnician(technicianId, token);
     } catch (error) {
       const message =
@@ -73,7 +79,10 @@ export const addTechnicianReview = createAsyncThunk(
   'technicians/addReview',
   async ({ technicianId, ticketId, rating, comment }, thunkAPI) => {
     try {
-      const token = thunkAPI.getState().auth.user.token;
+      const token = thunkAPI.getState().auth.user?.token || localStorage.getItem('token');
+      if (!token) {
+        return thunkAPI.rejectWithValue('Não autenticado');
+      }
       return await technicianService.addTechnicianReview(technicianId, { ticketId, rating, comment }, token);
     } catch (error) {
       const message =

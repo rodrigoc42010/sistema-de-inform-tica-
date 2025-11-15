@@ -76,10 +76,10 @@ function Sidebar() {
 
   // Buscar anúncios ativos quando aplicável
   useEffect(() => {
-    if (user && !user.isAdFree) {
+    if (user?.token && !user.isAdFree) {
       dispatch(fetchActiveAds());
     }
-  }, [dispatch, user?.isAdFree]);
+  }, [dispatch, user?.token, user?.isAdFree]);
   const handleDrawerToggle = () => {
     setOpen(!open);
   };

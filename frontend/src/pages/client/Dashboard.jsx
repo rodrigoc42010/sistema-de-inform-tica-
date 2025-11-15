@@ -62,19 +62,16 @@ function ClientDashboard() {
     if (isErrorTickets) {
       toast.error(messageTickets);
     }
+  }, [isErrorTickets, messageTickets]);
 
-    // Verificar se o e-mail não foi verificado
-    if (user && !user.emailVerified) {
-      setShowEmailVerificationAlert(true);
-    }
-    
-    // TODO: Obter a localização real do usuário
-    const userLocation = { lat: -23.55052, lng: -46.633308 }; // Localização de São Paulo como exemplo
+  useEffect(() => {
+    if (!user?.token) return;
+
+    const userLocation = { lat: -23.55052, lng: -46.633308 };
 
     dispatch(getTickets());
     dispatch(getNearbyTechnicians(userLocation));
 
-    // Exibe o alerta de verificação de e-mail se o usuário for novo e não verificado
     if (user && user.isNewUser && !user.isVerified) {
       setShowEmailVerificationAlert(true);
     }
@@ -83,15 +80,15 @@ function ClientDashboard() {
       dispatch(resetTickets());
       dispatch(resetTechnicians());
     };
-  }, [user, isErrorTickets, messageTickets, dispatch]);
+  }, [dispatch, user?.token]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
 
   const handleRefresh = () => {
-    // Adicione aqui a lógica para buscar novamente os tickets e técnicos
-    const userLocation = { lat: -23.55052, lng: -46.633308 }; // Localização de São Paulo como exemplo
+    if (!user?.token) return;
+    const userLocation = { lat: -23.55052, lng: -46.633308 };
     dispatch(getTickets());
     dispatch(getNearbyTechnicians(userLocation));
   };
