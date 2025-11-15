@@ -2,14 +2,19 @@ import axios from '../../api/axios';
 
 // Registrar usuário
 const register = async (userData) => {
-  const response = await axios.post('/api/users', userData);
-  if (response.data) {
-    localStorage.setItem('user', JSON.stringify(response.data));
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
+  try {
+    const response = await axios.post('/api/users', userData);
+    if (response.data) {
+      localStorage.setItem('user', JSON.stringify(response.data));
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
     }
+    return response.data;
+  } catch (err) {
+    const message = (err.response && err.response.data && err.response.data.message) || err.message || 'Falha ao registrar';
+    throw new Error(message);
   }
-  return response.data;
 };
 
 // Login de usuário

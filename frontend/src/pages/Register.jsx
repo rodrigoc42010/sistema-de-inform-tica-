@@ -130,20 +130,10 @@ function Register() {
     if (isError) {
       toast.error(message);
       setTimeout(() => dispatch(reset()), 50);
-      return;
     }
 
-    if (isSuccess && user) {
-      if (message && message.includes('Verifique seu e-mail')) {
-        toast.success(message, { autoClose: 8000 });
-      }
-
-      if (user.role === 'client') {
-        navigate('/client/dashboard');
-      } else if (user.role === 'technician') {
-        navigate('/technician/dashboard');
-      }
-      setTimeout(() => dispatch(reset()), 100);
+    if (isSuccess && user && message && message.includes('Verifique seu e-mail')) {
+      toast.success(message, { autoClose: 8000 });
     }
   }, [user, isError, isSuccess, message, navigate, dispatch]);
 
@@ -316,7 +306,18 @@ function Register() {
     }
     
     console.log('Submitting register payload', userData);
-    dispatch(register(userData));
+    dispatch(register(userData))
+      .unwrap()
+      .then((u) => {
+        if (u?.role === 'technician') {
+          navigate('/technician/dashboard');
+        } else {
+          navigate('/client/dashboard');
+        }
+      })
+      .catch((err) => {
+        toast.error(typeof err === 'string' ? err : (err?.message || 'Falha ao registrar'));
+      });
   };
 
   const toggleShowPassword = () => {
