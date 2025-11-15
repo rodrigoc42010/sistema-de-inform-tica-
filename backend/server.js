@@ -61,6 +61,30 @@ app.use((req, res, next) => { next(); });
 
 // Endurecimento básico (antes de rotas)
 app.use(helmet());
+app.use(
+  helmet.contentSecurityPolicy({
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: [
+        "'self'",
+        'data:',
+        'blob:',
+        'https:',
+        'https://images.unsplash.com',
+        'https://randomuser.me',
+        'https://via.placeholder.com'
+      ],
+      connectSrc: ["'self'", 'https:', 'wss:', 'ws:'],
+      scriptSrc: ["'self'", 'https:', "'unsafe-inline'"],
+      styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
+      fontSrc: ["'self'", 'https:', 'data:'],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'self'"],
+      upgradeInsecureRequests: []
+    },
+  })
+);
 app.use(hpp());
 app.use(mongoSanitize());
 // Sanitização de entrada (substitui xss-clean)
