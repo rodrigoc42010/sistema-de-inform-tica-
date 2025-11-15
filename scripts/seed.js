@@ -1,190 +1,143 @@
-/*
-  Seed de dados iniciais para o Sistema de Informática
-  - Cria usuário técnico e cliente padrão, anúncios públicos e um chamado de exemplo
-  - Idempotente: só cria se não existir
-*/
-
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-require('colors');
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const initPostgres = require('../backend/config/pg');
+const { getPool } = require('../backend/db/pgClient');
 
-const connectDB = require('../backend/config/db');
-const User = require('../backend/models/userModel');
-const Technician = require('../backend/models/technicianModel');
-const Ad = require('../backend/models/adModel');
-const Ticket = require('../backend/models/ticketModel');
-
-async function ensureConnection() {
-  const ok = await connectDB();
-  if (!ok) {
-    console.error('Falha ao conectar no MongoDB. Verifique MONGO_URI no .env.');
-    process.exit(1);
-  }
-}
-
-async function upsertDefaultUsers() {
+async function upsertDefaultUsers(pool) {
   const seedPassword = process.env.SEED_PASSWORD || '123456';
   const salt = await bcrypt.genSalt(10);
   const hashed = await bcrypt.hash(seedPassword, salt);
 
-  // Técnico padrão
   const techEmail = process.env.SEED_TECH_EMAIL || 'tech@example.com';
-  let techUser = await User.findOne({ email: techEmail });
+  const rsTechUser = await pool.query('SELECT * FROM users WHERE email=$1 LIMIT 1', [techEmail]);
+  let techUser = rsTechUser.rowCount ? rsTechUser.rows[0] : null;
   if (!techUser) {
-    techUser = await User.create({
-      name: 'Técnico Padrão',
-      email: techEmail,
-      password: hashed,
-      role: 'technician',
-      phone: '11999999999',
-      cpfCnpj: '12345678900',
-      address: {
-        street: 'Rua Exemplo',
-        number: '100',
-        neighborhood: 'Centro',
-        city: 'São Paulo',
-        state: 'SP',
-        country: 'Brasil',
-        zipCode: '01000-000',
-      },
-      emailVerified: true,
-    });
-    console.log(`Usuário técnico criado: ${techUser.email}`);
-  } else {
-    console.log(`Usuário técnico já existe: ${techUser.email}`);
+    const address = {
+      street: 'Rua Exemplo',
+      number: '100',
+      neighborhood: 'Centro',
+      city: 'São Paulo',
+      state: 'SP',
+      country: 'Brasil',
+      zipCode: '01000-000'
+    };
+    const inserted = await pool.query(
+      'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      ['Técnico Padrão', techEmail, hashed, 'technician', '11999999999', '12345678900', JSON.stringify(address), true]
+    );
+    techUser = inserted.rows[0];
   }
 
-  // Vincular registro de técnico
-  let tech = await Technician.findOne({ userId: techUser._id });
+  const rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [techUser.id]);
+  let tech = rsTech.rowCount ? rsTech.rows[0] : null;
   if (!tech) {
-    const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000)
-      .toString()
-      .padStart(3, '0')}`;
-    tech = await Technician.create({
-      userId: techUser._id,
-      loginId,
-      services: [
-        { name: 'Formatação de Sistema', description: 'Limpeza e reinstalação', price: 150 },
-        { name: 'Troca de HD/SSD', description: 'Instalação e clonagem', price: 250 },
-      ],
-      specialties: ['Hardware', 'Software'],
-      availability: true,
-      pickupService: true,
-      pickupFee: 30,
-      paymentMethods: ['PIX', 'Dinheiro'],
-    });
-    console.log(`Registro de técnico criado com LoginID: ${tech.loginId}`);
-  } else {
-    console.log(`Registro de técnico já existe com LoginID: ${tech.loginId}`);
+    const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+    const services = [
+      { name: 'Formatação de Sistema', description: 'Limpeza e reinstalação', price: 150 },
+      { name: 'Troca de HD/SSD', description: 'Instalação e clonagem', price: 250 }
+    ];
+    const specialties = ['Hardware', 'Software'];
+    const paymentMethods = ['PIX', 'Dinheiro'];
+    await pool.query(
+      'INSERT INTO technicians (user_id,login_id,services,specialties,availability,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [techUser.id, loginId, JSON.stringify(services), JSON.stringify(specialties), true, true, 30, JSON.stringify(paymentMethods)]
+    );
+    const rsNewTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [techUser.id]);
+    tech = rsNewTech.rowCount ? rsNewTech.rows[0] : null;
   }
 
-  // Cliente padrão
   const clientEmail = process.env.SEED_CLIENT_EMAIL || 'client@example.com';
-  let clientUser = await User.findOne({ email: clientEmail });
+  const rsClientUser = await pool.query('SELECT * FROM users WHERE email=$1 LIMIT 1', [clientEmail]);
+  let clientUser = rsClientUser.rowCount ? rsClientUser.rows[0] : null;
   if (!clientUser) {
-    clientUser = await User.create({
-      name: 'Cliente Padrão',
-      email: clientEmail,
-      password: hashed,
-      role: 'client',
-      phone: '11988888888',
-      cpfCnpj: '98765432100',
-      address: {
-        street: 'Av. Demonstração',
-        number: '200',
-        neighborhood: 'Bairro',
-        city: 'São Paulo',
-        state: 'SP',
-        country: 'Brasil',
-        zipCode: '02000-000',
-      },
-      emailVerified: true,
-    });
-    console.log(`Usuário cliente criado: ${clientUser.email}`);
-  } else {
-    console.log(`Usuário cliente já existe: ${clientUser.email}`);
+    const address = {
+      street: 'Av. Demonstração',
+      number: '200',
+      neighborhood: 'Bairro',
+      city: 'São Paulo',
+      state: 'SP',
+      country: 'Brasil',
+      zipCode: '02000-000'
+    };
+    const inserted = await pool.query(
+      'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,email_verified) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      ['Cliente Padrão', clientEmail, hashed, 'client', '11988888888', '98765432100', JSON.stringify(address), true]
+    );
+    clientUser = inserted.rows[0];
   }
 
   return { techUser, clientUser, tech };
 }
 
-async function seedAds(techUserId) {
-  const count = await Ad.countDocuments();
-  if (count > 0) {
-    console.log(`Anúncios já presentes: ${count}. Pulando criação.`);
-    return;
-  }
+async function seedAds(pool, techUserId) {
+  const rsCount = await pool.query('SELECT COUNT(1) AS c FROM ads');
+  const count = Number(rsCount.rows[0].c || 0);
+  if (count > 0) return;
   const now = new Date();
-  const nextMonth = new Date(now);
-  nextMonth.setMonth(nextMonth.getMonth() + 1);
-
-  const ads = [
-    {
-      title: 'Oferta: Formatação Completa',
-      text: 'Formatação com backup por apenas R$ 150,00!',
-      audience: 'client',
-      active: true,
-      startDate: now,
-      endDate: nextMonth,
-      createdBy: techUserId,
-    },
-    {
-      title: 'Troca de SSD com Desconto',
-      text: 'Ganhe performance trocando para SSD. Parcela no PIX!',
-      audience: 'all',
-      active: true,
-      startDate: now,
-      endDate: nextMonth,
-      createdBy: techUserId,
-    },
-  ];
-
-  await Ad.insertMany(ads);
-  console.log(`Criados ${ads.length} anúncios públicos.`);
+  const end = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  await pool.query(
+    'INSERT INTO ads (title,text,audience,active,start_date,end_date,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7),($8,$9,$10,$11,$12,$13,$14)',
+    [
+      'Oferta: Formatação Completa',
+      'Formatação com backup por apenas R$ 150,00!',
+      'client',
+      true,
+      now,
+      end,
+      techUserId,
+      'Troca de SSD com Desconto',
+      'Ganhe performance trocando para SSD. Parcela no PIX!',
+      'all',
+      true,
+      now,
+      end,
+      techUserId
+    ]
+  );
 }
 
-async function seedTicket(clientId, techUserId) {
-  const count = await Ticket.countDocuments();
-  if (count > 0) {
-    console.log(`Chamados já presentes: ${count}. Pulando criação.`);
-    return;
-  }
-  await Ticket.create({
-    title: 'Notebook lento',
-    description: 'Equipamento iniciou muito lento hoje. Suspeita de HD antigo.',
-    client: clientId,
-    technician: techUserId,
-    status: 'aberto',
-    priority: 'alta',
-    deviceType: 'Notebook',
-    deviceBrand: 'Dell',
-    deviceModel: 'Inspiron 15',
-    problemCategory: 'Desempenho',
-    serviceItems: [
-      { name: 'Diagnóstico inicial', description: 'Verificação de disco e RAM', price: 50, approved: true },
-    ],
-    notes: [
-      { text: 'Cliente relata queda de performance após atualização do Windows.' },
-    ],
-  });
-  console.log('Chamado de exemplo criado.');
+async function seedTicket(pool, clientId, techUserId) {
+  const rsCount = await pool.query('SELECT COUNT(1) AS c FROM tickets');
+  const count = Number(rsCount.rows[0].c || 0);
+  if (count > 0) return;
+  const serviceItems = [
+    { name: 'Diagnóstico inicial', description: 'Verificação de disco e RAM', price: 50, approved: true }
+  ];
+  const notes = [
+    { text: 'Cliente relata queda de performance após atualização do Windows.' }
+  ];
+  await pool.query(
+    'INSERT INTO tickets (title,description,client,technician,status,priority,device_type,device_brand,device_model,service_items,notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+    [
+      'Notebook lento',
+      'Equipamento iniciou muito lento hoje. Suspeita de HD antigo.',
+      clientId,
+      techUserId,
+      'aberto',
+      'alta',
+      'Notebook',
+      'Dell',
+      'Inspiron 15',
+      JSON.stringify(serviceItems),
+      JSON.stringify(notes)
+    ]
+  );
 }
 
 async function main() {
   try {
-    await ensureConnection();
-    const { techUser, clientUser, tech } = await upsertDefaultUsers();
-    await seedAds(techUser._id);
-    await seedTicket(clientUser._id, techUser._id);
+    const ok = await initPostgres();
+    if (!ok) throw new Error('Falha ao inicializar Postgres');
+    const pool = getPool();
+    const { techUser, clientUser } = await upsertDefaultUsers(pool);
+    await seedAds(pool, techUser.id);
+    await seedTicket(pool, clientUser.id, techUser.id);
     console.log('Seed concluído com sucesso.');
   } catch (err) {
     console.error('Falha no seed:', err?.message || err);
+    process.exit(1);
   } finally {
-    try {
-      await mongoose.connection.close();
-    } catch {}
     process.exit(0);
   }
 }
