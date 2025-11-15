@@ -153,18 +153,27 @@ function NewTicket() {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
 
-    // Simulando upload de arquivos
-    const newAttachments = files.map((file) => ({
-      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      url: URL.createObjectURL(file),
-      file,
-    }));
+    const readers = files.map((file) =>
+      new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve({
+            id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            url: reader.result,
+            file,
+          });
+        };
+        reader.readAsDataURL(file);
+      })
+    );
 
-    setAttachments([...attachments, ...newAttachments]);
-    toast.success(`${files.length} arquivo(s) anexado(s) com sucesso!`);
+    Promise.all(readers).then((newAttachments) => {
+      setAttachments((prev) => [...prev, ...newAttachments]);
+      toast.success(`${files.length} arquivo(s) anexado(s) com sucesso!`);
+    });
   };
 
   const removeAttachment = (id) => {

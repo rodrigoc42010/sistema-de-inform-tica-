@@ -186,7 +186,6 @@ function NearbyTechnicians() {
   };
 
   const handleServiceChange = (event) => {
-    console.log('Serviço selecionado:', event.target.value);
     setSelectedService(event.target.value);
   };
 
@@ -224,14 +223,6 @@ function NearbyTechnicians() {
       const matchesService = selectedService === '' || 
         tech.services.includes(selectedService);
       
-      console.log(`Filtro debug para ${tech.name}:`);
-      console.log(`  - Serviço selecionado: "${selectedService}"`);
-      console.log(`  - Serviços do técnico:`, tech.services);
-      console.log(`  - Corresponde ao serviço: ${matchesService}`);
-      console.log(`  - Dentro do raio: ${withinRadius}`);
-      console.log(`  - Corresponde à pesquisa: ${matchesSearch}`);
-      console.log(`  - Resultado final: ${withinRadius && matchesSearch && matchesService}`);
-      
       return withinRadius && matchesSearch && matchesService;
     })
     .sort((a, b) => {
@@ -248,7 +239,7 @@ function NearbyTechnicians() {
       }
     });
 
-  console.log('Total técnicos filtrados:', filteredTechnicians.length);
+  
 
   return (
     <Box sx={{ display: 'flex' }}>
