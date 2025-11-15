@@ -129,21 +129,22 @@ function Register() {
   useEffect(() => {
     if (isError) {
       toast.error(message);
+      setTimeout(() => dispatch(reset()), 50);
+      return;
     }
 
-    if (isSuccess || user) {
+    if (isSuccess && user) {
       if (message && message.includes('Verifique seu e-mail')) {
         toast.success(message, { autoClose: 8000 });
       }
 
-      if (user && user.role === 'client') {
+      if (user.role === 'client') {
         navigate('/client/dashboard');
-      } else if (user && user.role === 'technician') {
+      } else if (user.role === 'technician') {
         navigate('/technician/dashboard');
       }
+      setTimeout(() => dispatch(reset()), 100);
     }
-
-    dispatch(reset());
   }, [user, isError, isSuccess, message, navigate, dispatch]);
 
   const handleNext = () => {
