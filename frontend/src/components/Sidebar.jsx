@@ -210,8 +210,8 @@ function Sidebar() {
         <ListItem disablePadding>
           <ListItemButton 
             component={Link} 
-            to={`/${user?.role}/profile`}
-            selected={location.pathname === `/${user?.role}/profile`}
+            to={`/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/profile`}
+            selected={location.pathname === `/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/profile`}
           >
             <ListItemIcon>
               <PersonIcon />
@@ -222,8 +222,8 @@ function Sidebar() {
         <ListItem disablePadding>
           <ListItemButton 
             component={Link} 
-            to={`/${user?.role}/settings`}
-            selected={location.pathname === `/${user?.role}/settings`}
+            to={`/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/settings`}
+            selected={location.pathname === `/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/settings`}
           >
             <ListItemIcon>
               <SettingsIcon />
@@ -303,13 +303,13 @@ function Sidebar() {
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        <MenuItem component={Link} to={`/${user?.role}/profile`} onClick={handleProfileMenuClose}>
+        <MenuItem component={Link} to={`/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/profile`} onClick={handleProfileMenuClose}>
           <ListItemIcon>
             <PersonIcon fontSize="small" />
           </ListItemIcon>
           Perfil
         </MenuItem>
-        <MenuItem component={Link} to={`/${user?.role}/settings`} onClick={handleProfileMenuClose}>
+        <MenuItem component={Link} to={`/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/settings`} onClick={handleProfileMenuClose}>
           <ListItemIcon>
             <SettingsIcon fontSize="small" />
           </ListItemIcon>

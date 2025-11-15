@@ -19,7 +19,9 @@ function NotFound() {
   // Determinar para onde redirecionar com base no tipo de usuário
   const getHomeLink = () => {
     if (!user) return '/login';
-    return user.role === 'client' ? '/client/dashboard' : '/technician/dashboard';
+    const segment = typeof window !== 'undefined' ? window.location.pathname.split('/')[1] : '';
+    const role = user?.role || (segment === 'technician' ? 'technician' : 'client');
+    return `/${role}/dashboard`;
   };
 
   return (
