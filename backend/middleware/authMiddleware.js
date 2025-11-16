@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const { getPool } = require('../db/pgClient');
 const isDemo = process.env.DEMO_MODE === 'true';
+const allowMulti = process.env.ALLOW_MULTI_SESSION === 'true';
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
@@ -43,7 +44,12 @@ const protect = asyncHandler(async (req, res, next) => {
           res.status(401);
           throw new Error('Não autorizado, usuário não encontrado');
         }
-        req.user = rs.rows[0];
+        const userRow = rs.rows[0];
+        if (!allowMulti && userRow.current_jti && userRow.current_jti !== decoded.jti) {
+          res.status(401);
+          throw new Error('Sessão inválida');
+        }
+        req.user = userRow;
       }
 
       // Invalidar tokens emitidos antes de alteração de senha

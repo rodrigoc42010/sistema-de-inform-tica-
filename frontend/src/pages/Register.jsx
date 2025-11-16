@@ -95,6 +95,8 @@ function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
+  const [termsScrolled, setTermsScrolled] = useState(false);
+  const [termsAgreeChecked, setTermsAgreeChecked] = useState(false);
   
   // Dados básicos (etapa 1)
   const [basicData, setBasicData] = useState({
@@ -361,6 +363,14 @@ function Register() {
 
   // Etapas do registro
   const steps = ['Informações Básicas', 'Endereço', userType === 'technician' ? 'Serviços Oferecidos' : 'Confirmação'];
+
+  useEffect(() => {
+    if (activeStep === steps.length - 1) {
+      setTermsOpen(true);
+      setTermsScrolled(false);
+      setTermsAgreeChecked(false);
+    }
+  }, [activeStep]);
 
   return (
     <Box className="auth-page">
@@ -789,7 +799,7 @@ function Register() {
                     </Typography>
                     <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                       <FormControlLabel
-                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
+                        control={<Checkbox checked={termsAccepted} onChange={() => setTermsOpen(true)} />}
                         label="Li e concordo com os Termos de Uso e a Política de Privacidade"
                       />
                       <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
@@ -804,7 +814,7 @@ function Register() {
                     </Typography>
                     <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                       <FormControlLabel
-                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
+                        control={<Checkbox checked={termsAccepted} onChange={() => setTermsOpen(true)} />}
                         label="Li e concordo com os Termos de Uso e a Política de Privacidade"
                       />
                       <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
@@ -825,7 +835,7 @@ function Register() {
                         variant="contained"
                         color="primary"
                         onClick={onSubmit}
-                        disabled={isLoading}
+                        disabled={!termsAccepted || isLoading}
                       >
                         Registrar
                       </Button>
@@ -859,7 +869,14 @@ function Register() {
 
       <Dialog open={termsOpen} onClose={() => setTermsOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Termos de Uso e Política de Privacidade</DialogTitle>
-        <DialogContent dividers>
+        <DialogContent
+          dividers
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+            if (atBottom) setTermsScrolled(true);
+          }}
+        >
           <Typography variant="body2" paragraph>
             Última atualização: 2025
           </Typography>
@@ -912,9 +929,25 @@ function Register() {
           <Typography variant="body2" paragraph>
             Ao clicar em “Concordo”, o usuário confirma que leu e compreendeu todos os termos, autoriza o uso e tratamento dos dados conforme descrito, está de acordo com a LGPD e assume total responsabilidade pelas informações enviadas.
           </Typography>
+          <Box sx={{ mt: 2 }}>
+            <FormControlLabel
+              control={<Checkbox checked={termsAgreeChecked} onChange={(e) => setTermsAgreeChecked(e.target.checked)} />}
+              label="Li e concordo com os Termos de Uso e a Política de Privacidade"
+            />
+            <Typography variant="caption" color={termsScrolled ? 'success.main' : 'text.secondary'}>
+              Role até o final para habilitar o botão de concordância.
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setTermsOpen(false)}>Fechar</Button>
+          <Button
+            variant="contained"
+            onClick={() => { if (termsAgreeChecked && termsScrolled) { setTermsAccepted(true); setTermsOpen(false); } }}
+            disabled={!termsAgreeChecked || !termsScrolled}
+          >
+            Concordo
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
