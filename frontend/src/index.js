@@ -7,9 +7,23 @@ import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import App from './App';
 import './index.css';
-import { initAnalytics } from './utils/analytics';
 
-initAnalytics(process.env.REACT_APP_GA_MEASUREMENT_ID);
+try {
+  const __gaId = process.env.REACT_APP_GA_MEASUREMENT_ID;
+  if (typeof document !== 'undefined' && __gaId && !window.__gaLoaded) {
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(__gaId);
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ window.dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag('js', new Date());
+    gtag('config', __gaId, { anonymize_ip: true });
+    window.__gaLoaded = true;
+  }
+} catch (_) {}
+
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
