@@ -275,13 +275,23 @@ app.get('/microsoft-icon.svg', (req, res) => {
 // Pasta para uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Servir o frontend em produção (SPA)
+// Servir o frontend em produção (SPA) com fallback para /frontend/public
 const frontendBuildPath = path.join(__dirname, '../frontend/build');
-if (fs.existsSync(frontendBuildPath)) {
+const frontendPublicPath = path.join(__dirname, '../frontend/public');
+const buildIndex = path.join(frontendBuildPath, 'index.html');
+const publicIndex = path.join(frontendPublicPath, 'index.html');
+
+if (fs.existsSync(buildIndex)) {
   app.use(express.static(frontendBuildPath));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
-    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+    res.sendFile(buildIndex);
+  });
+} else if (fs.existsSync(publicIndex)) {
+  app.use(express.static(frontendPublicPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(publicIndex);
   });
 }
 
@@ -323,9 +333,7 @@ app.listen(PORT, '0.0.0.0', () => {
     console.warn(`Falha ao iniciar HTTPS: ${e.message}. Continuando apenas com HTTP.`.magenta);
   }
 })();
-app.get('/', (req, res) => {
-  res.status(200).send('OK');
-});
+// Removido o fallback "OK" para não mascarar a SPA
 app.get('/healthz', (req, res) => {
   res.status(200).json({ ok: true, time: new Date().toISOString() });
 });
