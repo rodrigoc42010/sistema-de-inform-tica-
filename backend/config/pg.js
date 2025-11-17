@@ -143,6 +143,44 @@ async function initPostgres() {
       `);
 
       await client.query(`
+        CREATE TABLE IF NOT EXISTS plans (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name TEXT NOT NULL UNIQUE,
+          limits JSONB,
+          price NUMERIC DEFAULT 0,
+          currency TEXT DEFAULT 'BRL',
+          active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS subscriptions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          plan_id UUID NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+          status TEXT DEFAULT 'active',
+          start_date TIMESTAMP DEFAULT NOW(),
+          end_date TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS payment_logs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          provider TEXT,
+          intent_id TEXT,
+          payload JSONB,
+          status TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+
+      await client.query(`
         CREATE TABLE IF NOT EXISTS blacklisted_tokens (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           jti TEXT NOT NULL UNIQUE,

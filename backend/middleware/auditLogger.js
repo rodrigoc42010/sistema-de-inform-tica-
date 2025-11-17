@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { getPool } = require('../db/pgClient');
 
 // Criar diretório de logs se não existir
 // Padroniza para a pasta de logs na raiz do projeto
@@ -84,6 +85,7 @@ function logLogin(userInfo, req) {
   
   // Log no console também
   console.log(`[AUDIT] Login realizado - Usuário: ${userInfo.email} | IP: ${maskedIP}`.green);
+  try { const pool = getPool(); pool.query('INSERT INTO analytics_events (user_id, event, metadata) VALUES ($1,$2,$3)', [userInfo.id || null, 'login', JSON.stringify({ ip: maskedIP, ua: userAgent })]); } catch {}
 }
 
 // Função para registrar tentativa de login falhada
@@ -116,6 +118,7 @@ function logFailedLogin(email, req, reason = 'Credenciais inválidas') {
   
   // Log no console também
   console.log(`[AUDIT] Tentativa de login falhada - Email: ${email} | IP: ${maskedIP} | Motivo: ${reason}`.red);
+  try { const pool = getPool(); pool.query('INSERT INTO analytics_events (user_id, event, metadata) VALUES ($1,$2,$3)', [null, 'login_failed', JSON.stringify({ email, ip: maskedIP, ua: userAgent, reason })]); } catch {}
 }
 
 // Função para registrar logout
@@ -142,6 +145,7 @@ function logLogout(userInfo, req) {
   fs.appendFileSync(auditLogPath, logLine);
   
   console.log(`[AUDIT] Logout realizado - Usuário: ${userInfo.email} | IP: ${maskedIP}`.yellow);
+  try { const pool = getPool(); pool.query('INSERT INTO analytics_events (user_id, event, metadata) VALUES ($1,$2,$3)', [userInfo.id || null, 'logout', JSON.stringify({ ip: maskedIP })]); } catch {}
 }
 
 module.exports = {

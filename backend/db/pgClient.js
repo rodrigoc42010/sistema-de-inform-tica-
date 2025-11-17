@@ -9,7 +9,21 @@ function getPool() {
     const pg = require('pg');
     const defaultSsl = process.env.NODE_ENV === 'production' ? 'true' : 'false';
     const sslEnabled = (process.env.POSTGRES_SSL || defaultSsl) === 'true';
-    poolInstance = new pg.Pool({ connectionString: url, ssl: sslEnabled ? { rejectUnauthorized: false } : false });
+    const max = Number(process.env.PG_POOL_MAX || 10);
+    const idleTimeoutMillis = Number(process.env.PG_POOL_IDLE || 30000);
+    const connectionTimeoutMillis = Number(process.env.PG_CONN_TIMEOUT || 5000);
+    poolInstance = new pg.Pool({
+      connectionString: url,
+      ssl: sslEnabled ? { rejectUnauthorized: false } : false,
+      max,
+      idleTimeoutMillis,
+      connectionTimeoutMillis,
+      keepAlive: true,
+    });
+    poolInstance.on('error', async () => {
+      try { await poolInstance.end(); } catch {}
+      poolInstance = null;
+    });
   }
   return poolInstance;
 }

@@ -7,6 +7,9 @@ import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import App from './App';
 import './index.css';
+import { initAnalytics } from './utils/analytics';
+
+initAnalytics(process.env.REACT_APP_GA_MEASUREMENT_ID);
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

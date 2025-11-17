@@ -71,6 +71,8 @@ const registerUser = asyncHandler(async (req, res) => {
     demoUsers.push(user);
 
     // Log de pseudo-registro (não envia e-mail em modo demo)
+    const token = generateToken(user._id);
+    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -83,7 +85,7 @@ const registerUser = asyncHandler(async (req, res) => {
       adFreeUntil: user.adFreeUntil,
       isAdFree: false,
       ...(user.loginId ? { loginId: user.loginId } : {}),
-      token: generateToken(user._id),
+      token,
       message: 'Usuário registrado com sucesso! (modo demonstração)'
     });
     return;
@@ -167,7 +169,16 @@ const registerUser = asyncHandler(async (req, res) => {
       adFreeUntil: userRow.ad_free_until || null,
       isAdFree: userRow.ad_free_until ? new Date(userRow.ad_free_until) > new Date() : false,
       ...(loginId ? { loginId } : {}),
-      token: generateToken(userRow.id),
+      token: (function(){
+        const t = generateToken(userRow.id);
+        try {
+          const decoded = jwt.decode(t);
+          const pool = getPool();
+          pool.query('UPDATE users SET current_jti=$1 WHERE id=$2', [decoded.jti, userRow.id]).catch(()=>{});
+          res.cookie('token', t, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
+        } catch {}
+        return t;
+      })(),
       message: 'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
     });
   } catch (error) {
@@ -326,6 +337,8 @@ const loginTechnician = asyncHandler(async (req, res) => {
     // Sucesso: log de login
     logLogin({ id: user._id, email: user.email, name: user.name, loginId: user.loginId, cpfCnpj: user.cpfCnpj }, req);
 
+    const token = generateToken(user._id);
+    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
     return res.json({
       _id: user._id,
       name: user.name,
@@ -338,7 +351,7 @@ const loginTechnician = asyncHandler(async (req, res) => {
       loginId: user.loginId,
       adFreeUntil: user.adFreeUntil || null,
       isAdFree: false,
-      token: generateToken(user._id),
+      token,
     });
   }
 
@@ -803,6 +816,7 @@ const logoutUser = asyncHandler(async (req, res) => {
     if (req.user) {
       logLogout({ id: req.user._id || req.user.id, email: req.user.email }, req);
     }
+    try { res.clearCookie('token', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' }); } catch {}
     return res.status(200).json({ message: 'Logout efetuado com sucesso' });
   } catch (e) {
     return res.status(200).json({ message: 'Logout efetuado' });
