@@ -353,14 +353,6 @@ function Register() {
     setShowConfirmPassword(!showConfirmPassword);
   };
 
-  if (isLoading) {
-    return (
-      <Box className="loading">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   // Etapas do registro
   const steps = ['Informações Básicas', 'Endereço', userType === 'technician' ? 'Serviços Oferecidos' : 'Confirmação'];
 
@@ -370,7 +362,15 @@ function Register() {
       setTermsScrolled(false);
       setTermsAgreeChecked(false);
     }
-  }, [activeStep]);
+  }, [activeStep, steps.length]);
+
+  if (isLoading) {
+    return (
+      <Box className="loading">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box className="auth-page">
