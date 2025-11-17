@@ -61,6 +61,13 @@ app.use((req, res, next) => { next(); });
 
 // Endurecimento básico (antes de rotas)
 app.use(helmet());
+const gaEnabled = !!process.env.REACT_APP_GA_MEASUREMENT_ID || !!process.env.GA_MEASUREMENT_ID;
+const cspScriptSrc = ["'self'"];
+const cspConnectSrc = ["'self'", 'https:', 'wss:', 'ws:'];
+if (gaEnabled) {
+  cspScriptSrc.push('https://www.googletagmanager.com', "'unsafe-inline'");
+  cspConnectSrc.push('https://www.google-analytics.com');
+}
 app.use(
   helmet.contentSecurityPolicy({
     useDefaults: true,
@@ -75,16 +82,22 @@ app.use(
         'https://randomuser.me',
         'https://via.placeholder.com'
       ],
-      connectSrc: ["'self'", 'https:', 'wss:', 'ws:'],
-      scriptSrc: ["'self'", 'https:', "'unsafe-inline'"],
-      styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
-      fontSrc: ["'self'", 'https:', 'data:'],
+      connectSrc: cspConnectSrc,
+      scriptSrc: cspScriptSrc,
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'", 'data:'],
       objectSrc: ["'none'"],
       frameAncestors: ["'self'"],
       upgradeInsecureRequests: []
     },
   })
 );
+app.use(helmet.hsts({ maxAge: 31536000, includeSubDomains: true, preload: true }));
+app.use(helmet.referrerPolicy({ policy: 'no-referrer' }));
+app.use(helmet.crossOriginEmbedderPolicy());
+app.use(helmet.crossOriginOpenerPolicy());
+app.use(helmet.crossOriginResourcePolicy({ policy: 'same-site' }));
+app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()'); next(); });
 app.use(hpp());
 app.use(mongoSanitize());
 // Sanitização de entrada (substitui xss-clean)
