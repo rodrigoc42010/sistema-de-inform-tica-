@@ -287,7 +287,7 @@ if (fs.existsSync(buildIndex)) {
 } else {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
-    res.status(503).send('Build do frontend ausente. Execute npm run build --prefix frontend.');
+    res.status(200).send('<!doctype html><html><head><meta charset="utf-8"><title>Servidor online</title></head><body><h1>Servidor online</h1><p>Build do frontend ausente. Execute <code>npm run build --prefix frontend</code> ou aguarde o deploy concluir.</p></body></html>');
   });
 }
 
