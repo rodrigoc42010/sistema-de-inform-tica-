@@ -275,23 +275,19 @@ app.get('/microsoft-icon.svg', (req, res) => {
 // Pasta para uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Servir o frontend em produção (SPA) com fallback para /frontend/public
+// Servir o frontend em produção (SPA)
 const frontendBuildPath = path.join(__dirname, '../frontend/build');
-const frontendPublicPath = path.join(__dirname, '../frontend/public');
 const buildIndex = path.join(frontendBuildPath, 'index.html');
-const publicIndex = path.join(frontendPublicPath, 'index.html');
-
 if (fs.existsSync(buildIndex)) {
   app.use(express.static(frontendBuildPath));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
     res.sendFile(buildIndex);
   });
-} else if (fs.existsSync(publicIndex)) {
-  app.use(express.static(frontendPublicPath));
+} else {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
-    res.sendFile(publicIndex);
+    res.status(503).send('Build do frontend ausente. Execute npm run build --prefix frontend.');
   });
 }
 

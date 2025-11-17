@@ -12,7 +12,7 @@
     "install-frontend": "npm install --prefix frontend",
     "install-all": "npm run install-backend && npm run install-frontend",
     "build": "npm run build --prefix frontend",
-    "postinstall": "npm run install-frontend",
+    "postinstall": "npm run install-frontend && npm run build --prefix frontend",
     "backup": "node scripts/backup.js",
     "seed": "node scripts/seed.js"
   },
@@ -55,7 +55,7 @@
     "nodemon": "^2.0.22"
   },
   "engines": {
-    "node": ">=18 <22",
+    "node": "20.x",
     "npm": ">=8"
   }
 }
