@@ -30,7 +30,7 @@ import {
   Snackbar,
   Alert,
   Menu,
-  MenuItem,
+  
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -475,8 +475,8 @@ function Payments() {
                       <AttachMoneyIcon color="success" sx={{ mr: 1, fontSize: 40 }} />
                       <Typography variant="h4">
                         R$ {user?.role === 'client'
-                          ? payments.filter((p) => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(2)
-                          : payments.filter((p) => p.status === 'completed').reduce((sum, p) => sum + p.netAmount, 0).toFixed(2)}
+                          ? paymentsSource.filter((p) => ['paid','pago'].includes(p.status)).reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)
+                          : paymentsSource.filter((p) => ['completed','recebido'].includes(p.status)).reduce((sum, p) => sum + (p.netAmount || p.amount || 0), 0).toFixed(2)}
                       </Typography>
                     </Box>
                   </CardContent>
@@ -492,8 +492,8 @@ function Payments() {
                       <AccountBalanceIcon color="warning" sx={{ mr: 1, fontSize: 40 }} />
                       <Typography variant="h4">
                         R$ {user?.role === 'client'
-                          ? payments.filter((p) => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0).toFixed(2)
-                          : payments.filter((p) => p.status === 'pending').reduce((sum, p) => sum + p.netAmount, 0).toFixed(2)}
+                          ? paymentsSource.filter((p) => ['pending','pendente'].includes(p.status)).reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)
+                          : paymentsSource.filter((p) => ['pending','pendente'].includes(p.status)).reduce((sum, p) => sum + (p.netAmount || p.amount || 0), 0).toFixed(2)}
                       </Typography>
                     </Box>
                   </CardContent>
@@ -507,7 +507,7 @@ function Payments() {
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <ReceiptIcon color="primary" sx={{ mr: 1, fontSize: 40 }} />
-                      <Typography variant="h4">{payments.length}</Typography>
+                      <Typography variant="h4">{paymentsSource.length}</Typography>
                     </Box>
                   </CardContent>
                 </Card>
