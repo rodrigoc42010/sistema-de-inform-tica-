@@ -13,6 +13,21 @@ async function initPostgres() {
 
     const client = await pool.connect();
     try {
+      // Apenas garantir conexão, migrations opcionais para reduzir cold-start
+      const runMigrations = process.env.RUN_MIGRATIONS_ON_START === 'true';
+      if (!runMigrations) {
+        // Verificar se tabelas essenciais existem; se não, rodar migrations automaticamente
+        const rs = await client.query("SELECT to_regclass('public.users') AS users, to_regclass('public.technicians') AS technicians");
+        const missingUsers = !rs.rows[0].users;
+        const missingTechs = !rs.rows[0].technicians;
+        if (!missingUsers && !missingTechs) {
+          console.log('Postgres conectado (tabelas existentes; sem migrations no start).'.green.bold);
+          client.release();
+          return true;
+        }
+        console.log('Tabelas ausentes detectadas; executando migrations automaticamente.'.yellow.bold);
+      }
+
       await client.query('BEGIN');
 
       // Extensões para UUID
@@ -200,7 +215,7 @@ async function initPostgres() {
       console.error('Falha ao inicializar Postgres:', e.message);
       return false;
     } finally {
-      client.release();
+      try { client.release(); } catch {}
     }
   } catch (err) {
     console.error('Erro ao conectar ao Postgres:', err.message);

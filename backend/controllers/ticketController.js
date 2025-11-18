@@ -136,4 +136,28 @@ module.exports = {
   getTickets,
   getTicket,
   updateTicket,
+  getTicketsReport: async (req, res) => {
+    const { getPool } = require('../db/pgClient');
+    const pool = getPool();
+    const userId = req.user.id || req.user._id;
+    const role = req.user.role;
+    const { groupBy = 'month', from, to, status } = req.query;
+    const where = [];
+    if (role === 'client') where.push('client=$1'); else where.push('technician=$1');
+    const params = [userId];
+    if (from) { params.push(new Date(from)); where.push(`created_at >= $${params.length}`); }
+    if (to) { params.push(new Date(to)); where.push(`created_at <= $${params.length}`); }
+    if (status) { params.push(status); where.push(`status=$${params.length}`); }
+    let bucket;
+    if (groupBy === 'day') bucket = `TO_CHAR(created_at, 'YYYY-MM-DD')`;
+    else if (groupBy === 'year') bucket = `TO_CHAR(created_at, 'YYYY')`;
+    else bucket = `TO_CHAR(created_at, 'YYYY-MM')`;
+    const sql = `SELECT ${bucket} AS period, COUNT(*) AS count, COALESCE(SUM(total_price),0) AS total
+                 FROM tickets
+                 WHERE ${where.join(' AND ')}
+                 GROUP BY period
+                 ORDER BY period ASC`;
+    const rs = await pool.query(sql, params);
+    res.json({ groupBy, from, to, status, rows: rs.rows });
+  },
 };

@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const { getPool } = require('../db/pgClient');
-const isDemo = process.env.DEMO_MODE === 'true';
+const isDemo = process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const allowMulti = process.env.ALLOW_MULTI_SESSION === 'true';
 
 const protect = asyncHandler(async (req, res, next) => {

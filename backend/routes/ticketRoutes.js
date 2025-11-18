@@ -6,6 +6,7 @@ const {
   getTickets,
   getTicket,
   updateTicket,
+  getTicketsReport,
 } = require('../controllers/ticketController');
 
 // Listar tickets do usuário autenticado
@@ -19,5 +20,8 @@ router.get('/:id', protect, getTicket);
 
 // Atualizar ticket (inclui fechamento via status)
 router.put('/:id', protect, updateTicket);
+
+// Relatório de tickets por período
+router.get('/report/summary', protect, getTicketsReport);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   Box,
@@ -29,6 +29,8 @@ import {
   DialogTitle,
   Snackbar,
   Alert,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -39,11 +41,13 @@ import {
   Visibility as VisibilityIcon,
   Receipt as ReceiptIcon,
   AccountBalance as AccountBalanceIcon,
+  MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 import Sidebar from '../components/Sidebar';
 import { selectUser } from '../selectors/authSelectors';
 import { setUser } from '../features/auth/authSlice';
 import adsService from '../features/ads/adsService';
+import axios from '../api/axios';
 
 function Payments() {
   const user = useSelector(selectUser);
@@ -72,7 +76,18 @@ function Payments() {
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   
-  // Mock data para pagamentos
+  // Dados carregados da API
+  const [apiPayments, setApiPayments] = useState([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [filters, setFilters] = useState({ q: '', method: 'all', status: 'all', from: '', to: '' });
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+  const [openReportDialog, setOpenReportDialog] = useState(false);
+  const [reportData, setReportData] = useState({ rows: [], groupBy: 'month' });
+  const [reportGroupBy, setReportGroupBy] = useState('month');
+
+  // Mock data para fallback local
   const clientPayments = [
     {
       id: 1,
@@ -146,31 +161,64 @@ function Payments() {
     },
   ];
 
-  const payments = user?.role === 'client' ? clientPayments : technicianPayments;
+  const paymentsSource = apiPayments.length ? apiPayments : (user?.role === 'client' ? clientPayments : technicianPayments);
+
+  useEffect(() => {
+    const fetchPayments = async () => {
+      try {
+        if (!user?.token) return;
+        setLoadingData(true);
+        const params = {};
+        if (filters.q) params.q = filters.q;
+        if (filters.method && filters.method !== 'all') params.method = filters.method;
+        if (filters.status && filters.status !== 'all') params.status = filters.status;
+        if (filters.from) params.from = filters.from;
+        if (filters.to) params.to = filters.to;
+        const resp = await axios.get('/api/payments', { params, headers: { Authorization: `Bearer ${user.token}` } });
+        setApiPayments(Array.isArray(resp.data?.items) ? resp.data.items : []);
+      } catch (e) {
+        setApiPayments([]);
+      } finally {
+        setLoadingData(false);
+      }
+    };
+    fetchPayments();
+  }, [user?.token]);
 
   const filteredPayments = useMemo(() => {
-    let rows = payments;
+    let rows = paymentsSource;
 
     if (activeTab === 1) {
-      rows = rows.filter((p) => p.status === 'pending');
+      rows = rows.filter((p) => ['pending','pendente'].includes(p.status));
     } else if (activeTab === 2) {
-      rows = rows.filter((p) => (user?.role === 'client' ? p.status === 'paid' : p.status === 'completed'));
+      rows = rows.filter((p) => (user?.role === 'client' ? ['paid','pago'].includes(p.status) : ['completed','recebido'].includes(p.status)));
     }
 
-    if (filterQuery) {
-      const q = filterQuery.toLowerCase();
+    if (filterQuery || filters.q) {
+      const q = (filters.q || filterQuery).toLowerCase();
       rows = rows.filter((p) => {
         const who = user?.role === 'client' ? p.technician : p.client;
         return [p.description, who, p.ticketId].some((val) => (val || '').toString().toLowerCase().includes(q));
       });
     }
 
-    if (user?.role === 'client' && filterMethod !== 'all') {
-      rows = rows.filter((p) => (p.paymentMethod || 'none') === filterMethod);
+    const m = filters.method || filterMethod;
+    if (user?.role === 'client' && m !== 'all') {
+      rows = rows.filter((p) => (p.paymentMethod || 'none') === m);
     }
 
+    if (filters.status && filters.status !== 'all') {
+      const st = filters.status;
+      rows = rows.filter((p) => [st].includes(p.status));
+    }
+
+    const from = filters.from ? new Date(filters.from) : null;
+    const to = filters.to ? new Date(filters.to) : null;
+    if (from) rows = rows.filter((p) => new Date(p.date) >= from);
+    if (to) rows = rows.filter((p) => new Date(p.date) <= to);
+
     return rows;
-  }, [payments, activeTab, filterQuery, filterMethod, user?.role]);
+  }, [paymentsSource, activeTab, filterQuery, filterMethod, user?.role, filters]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -190,6 +238,21 @@ function Payments() {
     setOpenReceiptDialog(true);
   };
 
+  // Menu de ações (status)
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [actionPayment, setActionPayment] = useState(null);
+  const actionsOpen = Boolean(anchorEl);
+  const openActions = (evt, p) => { setAnchorEl(evt.currentTarget); setActionPayment(p); };
+  const closeActions = () => { setAnchorEl(null); setActionPayment(null); };
+  const applyStatus = async (newStatus) => {
+    try {
+      if (!user?.token || !actionPayment?.id) return;
+      await axios.put(`/api/payments/${actionPayment.id}/status`, { status: newStatus }, { headers: { Authorization: `Bearer ${user.token}` } });
+      setApiPayments((prev) => prev.map((it) => it.id === actionPayment.id ? { ...it, status: newStatus } : it));
+    } catch {}
+    finally { closeActions(); }
+  };
+
   const handleCloseReceiptDialog = () => {
     setOpenReceiptDialog(false);
   };
@@ -202,10 +265,16 @@ function Payments() {
 
   const handleOpenFilterDialog = () => setOpenFilterDialog(true);
   const handleCloseFilterDialog = () => setOpenFilterDialog(false);
-  const handleApplyFilter = () => setOpenFilterDialog(false);
+  const handleApplyFilter = () => {
+    setFilters({ q: filterQuery, method: filterMethod, status: filterStatus, from: filterFrom, to: filterTo });
+    setOpenFilterDialog(false);
+  };
   const handleClearFilter = () => {
     setFilterQuery('');
     setFilterMethod('all');
+    setFilterStatus('all');
+    setFilterFrom('');
+    setFilterTo('');
     setOpenFilterDialog(false);
   };
 
@@ -309,6 +378,14 @@ function Payments() {
                   onClick={handleOpenFilterDialog}
                 >
                   Filtrar
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  sx={{ mr: 1 }}
+                  onClick={()=>setOpenReportDialog(true)}
+                >
+                  Relatório
                 </Button>
                 {user?.role === 'client' && (
                   <Button
@@ -506,6 +583,9 @@ function Payments() {
                             <DownloadIcon />
                           </IconButton>
                         )}
+                        <IconButton color="primary" size="small" onClick={(e)=>openActions(e, payment)}>
+                          <MoreVertIcon />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -515,6 +595,13 @@ function Payments() {
           </Paper>
         </Container>
       </Box>
+
+      {/* Menu de ações */}
+      <Menu anchorEl={anchorEl} open={actionsOpen} onClose={closeActions}>
+        <MenuItem onClick={()=>applyStatus(user?.role==='technician' ? 'recebido' : 'pago')}>{user?.role==='technician' ? 'Marcar como Recebido' : 'Marcar como Pago'}</MenuItem>
+        <MenuItem onClick={()=>applyStatus('pendente')}>Marcar como Pendente</MenuItem>
+        <MenuItem onClick={()=>applyStatus('cancelado')}>Marcar como Cancelado</MenuItem>
+      </Menu>
 
       {/* Dialog para realizar pagamento */}
       <Dialog open={openPaymentDialog} onClose={handleClosePaymentDialog}>
@@ -649,11 +736,110 @@ function Payments() {
               <MenuItem value="none">Sem método</MenuItem>
             </TextField>
           )}
+          <TextField
+            select
+            fullWidth
+            label="Status"
+            value={filterStatus}
+            onChange={(e)=>setFilterStatus(e.target.value)}
+            margin="normal"
+          >
+            <MenuItem value="all">Todos</MenuItem>
+            <MenuItem value="pendente">Pendente</MenuItem>
+            <MenuItem value="pago">Pago</MenuItem>
+            <MenuItem value="recebido">Recebido</MenuItem>
+            <MenuItem value="cancelado">Cancelado</MenuItem>
+          </TextField>
+          <Grid container spacing={2} sx={{ mt: 0 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="date"
+                label="De"
+                InputLabelProps={{ shrink: true }}
+                value={filterFrom}
+                onChange={(e)=>setFilterFrom(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="date"
+                label="Até"
+                InputLabelProps={{ shrink: true }}
+                value={filterTo}
+                onChange={(e)=>setFilterTo(e.target.value)}
+              />
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseFilterDialog}>Fechar</Button>
           <Button onClick={handleClearFilter}>Limpar</Button>
           <Button onClick={handleApplyFilter} variant="contained">Aplicar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Relatório de pagamentos */}
+      <Dialog open={openReportDialog} onClose={()=>setOpenReportDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Relatório de Pagamentos</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <TextField select fullWidth label="Agrupar por" value={reportGroupBy} onChange={(e)=>setReportGroupBy(e.target.value)}>
+                <MenuItem value="day">Dia</MenuItem>
+                <MenuItem value="month">Mês</MenuItem>
+                <MenuItem value="year">Ano</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth type="date" label="De" InputLabelProps={{ shrink: true }} value={filterFrom} onChange={(e)=>setFilterFrom(e.target.value)} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth type="date" label="Até" InputLabelProps={{ shrink: true }} value={filterTo} onChange={(e)=>setFilterTo(e.target.value)} />
+            </Grid>
+          </Grid>
+          <TableContainer sx={{ mt: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Período</TableCell>
+                  <TableCell align="right">Quantidade</TableCell>
+                  <TableCell align="right">Total (R$)</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(reportData.rows || []).map((r)=> (
+                  <TableRow key={r.period}>
+                    <TableCell>{r.period}</TableCell>
+                    <TableCell align="right">{r.count}</TableCell>
+                    <TableCell align="right">{Number(r.total || 0).toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>setOpenReportDialog(false)}>Fechar</Button>
+          <Button onClick={async ()=>{
+            try {
+              if (!user?.token) return;
+              const params = { groupBy: reportGroupBy };
+              if (filterFrom) params.from = filterFrom;
+              if (filterTo) params.to = filterTo;
+              const resp = await axios.get('/api/payments/report', { params, headers: { Authorization: `Bearer ${user.token}` } });
+              setReportData(resp.data || { rows: [] });
+            } catch {}
+          }} variant="contained">Gerar</Button>
+          <Button onClick={()=>{
+            const rows = reportData.rows || [];
+            const csv = ['period,count,total'].concat(rows.map(r=>`${r.period},${r.count},${r.total}`)).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'relatorio-pagamentos.csv'; a.click(); URL.revokeObjectURL(url);
+          }} startIcon={<DownloadIcon />}>Exportar CSV</Button>
         </DialogActions>
       </Dialog>
 

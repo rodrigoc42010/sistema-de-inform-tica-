@@ -9,7 +9,7 @@ const { getPool } = require('../db/pgClient');
 // Modo de demonstração (sem banco de dados)
 let demoUsers = [];
 let demoCounter = 1;
-const isDemo = process.env.DEMO_MODE === 'true';
+const isDemo = process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_TIME_MINUTES = 15;
 
@@ -18,6 +18,7 @@ const LOCK_TIME_MINUTES = 15;
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone, cpfCnpj, address, technician, termsAccepted } = req.body;
+  const roleNormalized = (role === 'technician' || technician) ? 'technician' : 'client';
 
   // Validação
   if (!name || !email || !password || !role || !phone || !cpfCnpj) {
@@ -51,7 +52,7 @@ const registerUser = asyncHandler(async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role,
+      role: roleNormalized,
       phone,
       cpfCnpj,
       address,
@@ -60,7 +61,7 @@ const registerUser = asyncHandler(async (req, res) => {
     };
 
     // Se for técnico, criar loginId e anexar ao usuário demo
-    if (role === 'technician') {
+    if (roleNormalized === 'technician') {
       const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000)
         .toString()
         .padStart(3, '0')}`;
@@ -117,7 +118,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const addressJson = address ? JSON.stringify(address) : null;
     const inserted = await pool.query(
       'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified,terms_accepted,terms_accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until,terms_accepted,terms_accepted_at',
-      [name, email, hashedPassword, role, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false, true, new Date()]
+      [name, email, hashedPassword, roleNormalized, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false, true, new Date()]
     );
     const userRow = inserted.rows[0];
     const emailResult = await sendVerificationEmail(email, name, verifyToken);
@@ -125,7 +126,7 @@ const registerUser = asyncHandler(async (req, res) => {
       console.error('Erro ao enviar e-mail de verificação:', emailResult.error);
     }
     let loginId = null;
-    if (role === 'technician') {
+    if (roleNormalized === 'technician') {
       loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
       const mappedServices = Array.isArray(technician?.services)
         ? technician.services.map((s) => ({

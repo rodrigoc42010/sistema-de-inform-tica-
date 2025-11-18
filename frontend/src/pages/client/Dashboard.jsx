@@ -22,6 +22,18 @@ import {
   Tabs,
   Typography,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TableContainer,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -91,6 +103,22 @@ function ClientDashboard() {
     const userLocation = { lat: -23.55052, lng: -46.633308 };
     dispatch(getTickets());
     dispatch(getNearbyTechnicians(userLocation));
+  };
+
+  const [openReport, setOpenReport] = useState(false);
+  const [groupBy, setGroupBy] = useState('month');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [reportRows, setReportRows] = useState([]);
+  const generateReport = async () => {
+    try {
+      const token = user?.token; if (!token) return;
+      const params = { groupBy };
+      if (from) params.from = from; if (to) params.to = to;
+      const resp = await fetch('/api/tickets/report/summary?'+new URLSearchParams(params).toString(), { headers: { Authorization: `Bearer ${token}` } });
+      const data = await resp.json();
+      setReportRows(data?.rows || []);
+    } catch { setReportRows([]); }
   };
 
   if (isLoadingTickets || isLoadingTechnicians) {
@@ -411,20 +439,21 @@ function ClientDashboard() {
             <Typography variant="h4" component="h1">
               Painel do Cliente
             </Typography>
-            <Box>
-              <IconButton onClick={handleRefresh} disabled={isLoadingTickets || isLoadingTechnicians}>
-                <RefreshIcon />
-              </IconButton>
-              <Button 
-                variant="contained" 
-                color="primary" 
-                startIcon={<AddIcon />}
-                onClick={handleCreateTicket}
-                sx={{ ml: 1 }}
-              >
-                Novo Chamado
-              </Button>
-            </Box>
+          <Box>
+            <IconButton onClick={handleRefresh} disabled={isLoadingTickets || isLoadingTechnicians}>
+              <RefreshIcon />
+            </IconButton>
+            <Button variant="outlined" sx={{ ml: 1 }} onClick={()=>setOpenReport(true)}>Relatório</Button>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              startIcon={<AddIcon />}
+              onClick={handleCreateTicket}
+              sx={{ ml: 1 }}
+            >
+              Novo Chamado
+            </Button>
+          </Box>
           </Box>
           
           <Paper sx={{ mb: 3, borderRadius: 3, p: { xs: 1, md: 2 } }} elevation={2}>
@@ -445,6 +474,55 @@ function ClientDashboard() {
           {getTabContent()}
         </Container>
       </Box>
+      <Dialog open={openReport} onClose={()=>setOpenReport(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Relatório de Chamados</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <TextField select fullWidth label="Agrupar por" value={groupBy} onChange={(e)=>setGroupBy(e.target.value)}>
+                <MenuItem value="day">Dia</MenuItem>
+                <MenuItem value="month">Mês</MenuItem>
+                <MenuItem value="year">Ano</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth type="date" label="De" InputLabelProps={{ shrink: true }} value={from} onChange={(e)=>setFrom(e.target.value)} />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField fullWidth type="date" label="Até" InputLabelProps={{ shrink: true }} value={to} onChange={(e)=>setTo(e.target.value)} />
+            </Grid>
+          </Grid>
+          <TableContainer sx={{ mt: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Período</TableCell>
+                  <TableCell align="right">Quantidade</TableCell>
+                  <TableCell align="right">Total (R$)</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {reportRows.map((r)=> (
+                  <TableRow key={r.period}>
+                    <TableCell>{r.period}</TableCell>
+                    <TableCell align="right">{r.count}</TableCell>
+                    <TableCell align="right">{Number(r.total || 0).toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>setOpenReport(false)}>Fechar</Button>
+          <Button onClick={generateReport} variant="contained">Gerar</Button>
+          <Button onClick={()=>{
+            const csv = ['period,count,total'].concat(reportRows.map(r=>`${r.period},${r.count},${r.total}`)).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='relatorio-chamados.csv'; a.click(); URL.revokeObjectURL(url);
+          }} startIcon={<RefreshIcon />}>Exportar CSV</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
