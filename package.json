@@ -12,9 +12,10 @@
     "install-frontend": "npm install --prefix frontend",
     "install-all": "npm run install-backend && npm run install-frontend",
     "build": "npm run build --prefix frontend",
-    "postinstall": "npm run install-frontend && npm run build --prefix frontend",
+    "postinstall": "npm run install-frontend && npm run build --prefix frontend && node scripts/reset-db.js",
     "backup": "node scripts/backup.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "db:reset": "node scripts/reset-db.js"
   },
   "keywords": [
     "informatica",
