@@ -30,9 +30,8 @@ async function initPostgres() {
 
       await client.query('BEGIN');
 
-      // Extensões para UUID
-      await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
-      await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
+      try { await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";'); } catch(e) {}
+      try { await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'); } catch(e) {}
 
       // Tabelas principais
       await client.query(`
@@ -64,6 +63,7 @@ async function initPostgres() {
 
       await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN DEFAULT FALSE');
       await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP NULL');
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS current_jti TEXT');
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS technicians (
@@ -202,6 +202,16 @@ async function initPostgres() {
           user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           expires_at TIMESTAMP NOT NULL,
           reason TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS analytics_events (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          event TEXT,
+          metadata JSONB,
           created_at TIMESTAMP DEFAULT NOW()
         );
       `);

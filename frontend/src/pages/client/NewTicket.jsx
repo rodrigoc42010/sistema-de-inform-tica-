@@ -39,7 +39,6 @@ import {
 // Componentes
 import Sidebar from '../../components/Sidebar';
 
-// Dados simulados (serão substituídos pela API)
 const deviceTypes = [
   'Notebook',
   'Desktop',
@@ -58,37 +57,14 @@ const priorityOptions = [
   { value: 'urgente', label: 'Urgente' },
 ];
 
-const mockTechnicians = [
-  {
-    _id: 't1',
-    name: 'Carlos Pereira',
-    specialties: ['Notebooks', 'Desktops', 'Redes'],
-    rating: 4.8,
-    distance: 2.5,
-  },
-  {
-    _id: 't2',
-    name: 'Ana Oliveira',
-    specialties: ['Smartphones', 'Tablets', 'Impressoras'],
-    rating: 4.9,
-    distance: 3.8,
-  },
-  {
-    _id: 't3',
-    name: 'Roberto Santos',
-    specialties: ['Redes', 'Servidores', 'Segurança'],
-    rating: 4.7,
-    distance: 5.2,
-  },
-];
-
 function NewTicket() {
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [selectedTechnician, setSelectedTechnician] = useState('');
   const [technicianOption, setTechnicianOption] = useState('auto');
-  
+  const [technicians, setTechnicians] = useState([]);
+
   const [ticketData, setTicketData] = useState({
     title: '',
     description: '',
@@ -99,10 +75,47 @@ function NewTicket() {
     priority: 'média',
     pickupRequired: false,
   });
-  
+
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
+
+  // Fetch technicians
+  React.useEffect(() => {
+    const fetchTechnicians = async () => {
+      try {
+        // Assuming there is a way to get the token, usually from redux or localStorage
+        // Here we'll try to use the token from the auth state if available, or just rely on the cookie if the browser handles it.
+        // But the controller expects a Bearer token in the header usually, or maybe cookie.
+        // Let's check how other components do it. Usually axios instance has interceptors.
+        // For now, we'll try a direct fetch with the token from localStorage if it exists there, or just rely on cookies.
+
+        // Actually, let's look at how the app makes requests. It likely uses an axios instance.
+        // Since I don't see an axios instance imported, I'll use fetch with the token from localStorage 'user' object if present.
+
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const token = storedUser.token;
+
+        const response = await fetch('http://localhost:5001/api/users/technicians', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setTechnicians(data);
+        } else {
+          console.error('Failed to fetch technicians');
+        }
+      } catch (error) {
+        console.error('Error fetching technicians:', error);
+      }
+    };
+
+    fetchTechnicians();
+  }, []);
 
   // Pré-seleção de técnico via query string
   const location = useLocation?.() || null;
@@ -118,7 +131,7 @@ function NewTicket() {
     } catch (e) {
       // silenciar erros de parsing
     }
-  }, []);
+  }, [location]);
   const handleBack = () => {
     navigate('/client/dashboard');
   };
@@ -192,7 +205,7 @@ function NewTicket() {
         return;
       }
     }
-    
+
     if (activeStep === 1) {
       // Validar dados do dispositivo
       if (!ticketData.deviceType) {
@@ -212,26 +225,60 @@ function NewTicket() {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setLoading(true);
 
-    // Preparar dados para envio
-    const ticketPayload = {
-      ...ticketData,
-      client: user._id,
-      technician: technicianOption === 'manual' ? selectedTechnician : null,
-      // Os anexos seriam enviados em uma requisição separada ou como FormData
-    };
+    try {
+      // Preparar dados para envio
+      const ticketPayload = {
+        title: ticketData.title,
+        description: ticketData.description,
+        priority: ticketData.priority,
+        deviceType: ticketData.deviceType,
+        deviceBrand: ticketData.deviceBrand,
+        deviceModel: ticketData.deviceModel,
+        serialNumber: ticketData.serialNumber,
+        problemCategory: ticketData.problemCategory,
+        attachments: ticketData.attachments || [],
+        serviceItems: ticketData.serviceItems || [],
+        initialDiagnosis: ticketData.initialDiagnosis,
+        pickupRequested: ticketData.pickupRequested,
+        pickupAddress: ticketData.pickupAddress,
+      };
 
-    // Aqui seria implementada a chamada à API para criar o chamado
-    // dispatch(createTicket(ticketPayload));
+      // Se técnico foi selecionado manualmente, adicionar ao payload
+      if (technicianOption === 'manual' && selectedTechnician) {
+        ticketPayload.technician = selectedTechnician;
+      }
 
-    // Simulando criação de chamado
-    setTimeout(() => {
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const token = storedUser.token;
+
+      const response = await fetch('http://localhost:5001/api/tickets', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(ticketPayload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao criar chamado');
+      }
+
+      const createdTicket = await response.json();
+      console.log('Chamado criado:', createdTicket);
+
       setLoading(false);
       toast.success('Chamado criado com sucesso!');
       navigate('/client/dashboard');
-    }, 1500);
+    } catch (error) {
+      setLoading(false);
+      console.error('Erro ao criar chamado:', error);
+      toast.error(error.message || 'Erro ao criar chamado. Tente novamente.');
+    }
   };
 
   const steps = [
@@ -391,7 +438,7 @@ function NewTicket() {
                     label="Selecione um Técnico"
                     required={technicianOption === 'manual'}
                   >
-                    {mockTechnicians.map((tech) => (
+                    {technicians.map((tech) => (
                       <MenuItem key={tech._id} value={tech._id}>
                         {tech.name} - {tech.specialties.join(', ')} - {tech.distance} km
                       </MenuItem>
@@ -559,7 +606,7 @@ function NewTicket() {
                   <Typography variant="body2" paragraph>
                     {technicianOption === 'auto'
                       ? 'Encontrar automaticamente'
-                      : mockTechnicians.find((tech) => tech._id === selectedTechnician)?.name || 'Não selecionado'}
+                      : technicians.find((tech) => tech._id === selectedTechnician)?.name || 'Não selecionado'}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>

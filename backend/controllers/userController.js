@@ -18,10 +18,17 @@ const LOCK_TIME_MINUTES = 15;
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone, cpfCnpj, address, technician, termsAccepted } = req.body;
-  const roleNormalized = (role === 'technician' || technician) ? 'technician' : 'client';
+  const normalizeRole = (r, techObj) => {
+    if (techObj) return 'technician';
+    const s = String(r || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (['technician', 'tecnico', 'tecnico(a)', 'tecnic', 'tech', 'tecnicx', 'tecnico profissional'].includes(s)) return 'technician';
+    if (['client', 'cliente', 'user', 'usuario'].includes(s)) return 'client';
+    return 'client';
+  };
+  const roleNormalized = normalizeRole(role, technician);
 
   // Validação
-  if (!name || !email || !password || !role || !phone || !cpfCnpj) {
+  if (!name || !email || !password || !phone || !cpfCnpj) {
     res.status(400);
     throw new Error('Por favor, preencha todos os campos obrigatórios');
   }
@@ -95,6 +102,9 @@ const registerUser = asyncHandler(async (req, res) => {
   try {
     const hasDb = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
     const hasJwt = !!process.env.JWT_SECRET;
+
+    console.log(`[Register] Starting registration for ${email}. DB: ${hasDb}, Demo: ${isDemo}`.cyan);
+
     if (!hasDb) {
       res.status(500);
       throw new Error('Configuração ausente: DATABASE_URL/POSTGRES_URL');
@@ -104,94 +114,114 @@ const registerUser = asyncHandler(async (req, res) => {
       throw new Error('Configuração ausente: JWT_SECRET');
     }
     const pool = getPool();
-    const exists = await pool.query('SELECT id FROM users WHERE email=$1 LIMIT 1', [email]);
-    if (exists.rowCount > 0) {
-      res.status(400);
-      throw new Error('Usuário já cadastrado');
-    }
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    const verifyToken = crypto.randomBytes(32).toString('hex');
-    const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
-    const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const bankInfo = req.body.bankInfo ? JSON.stringify(req.body.bankInfo) : null;
-    const addressJson = address ? JSON.stringify(address) : null;
-    const inserted = await pool.query(
-      'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified,terms_accepted,terms_accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until,terms_accepted,terms_accepted_at',
-      [name, email, hashedPassword, roleNormalized, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false, true, new Date()]
-    );
-    const userRow = inserted.rows[0];
-    const emailResult = await sendVerificationEmail(email, name, verifyToken);
-    if (!emailResult.success) {
-      console.error('Erro ao enviar e-mail de verificação:', emailResult.error);
-    }
-    let loginId = null;
-    if (roleNormalized === 'technician') {
-      loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-      const mappedServices = Array.isArray(technician?.services)
-        ? technician.services.map((s) => ({
-            name: s.name,
+
+    // Start transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const exists = await client.query('SELECT id FROM users WHERE email=$1 LIMIT 1', [email]);
+      if (exists.rowCount > 0) {
+        res.status(400);
+        throw new Error('Usuário já cadastrado');
+      }
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+      const verifyToken = crypto.randomBytes(32).toString('hex');
+      const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
+      const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const bankInfo = req.body.bankInfo ? JSON.stringify(req.body.bankInfo) : null;
+      const addressJson = address ? JSON.stringify(address) : null;
+
+      console.log(`[Register] Inserting user ${email}...`);
+      const inserted = await client.query(
+        'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified,terms_accepted,terms_accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until,terms_accepted,terms_accepted_at',
+        [name, email, hashedPassword, roleNormalized, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false, true, new Date()]
+      );
+      const userRow = inserted.rows[0];
+
+      const emailResult = await sendVerificationEmail(email, name, verifyToken);
+      if (!emailResult.success) {
+        console.error('Erro ao enviar e-mail de verificação:', emailResult.error);
+      }
+
+      let loginId = null;
+      if (roleNormalized === 'technician') {
+        console.log(`[Register] Creating technician profile for ${email}...`);
+        loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+        const mappedServices = Array.isArray(technician?.services)
+          ? technician.services.map((s) => ({
+            name: s.name || s.title || 'Serviço',
             price: Number(s.initialPrice ?? s.price ?? 0) || 0,
             estimatedTime: s.estimatedTime,
             category: s.category,
             isActive: s.isActive !== undefined ? s.isActive : true,
           }))
-        : [];
-      const tData = {
-        user_id: userRow.id,
-        login_id: loginId,
-        services: mappedServices,
-        specialties: [],
-        pickup_service: !!technician?.pickupService,
-        pickup_fee: Number(technician?.pickupFee ?? 0) || 0,
-        payment_methods: Array.isArray(technician?.paymentMethods) ? technician.paymentMethods : [],
-      };
-      if (technician?.certifications) {
-        tData.specialties = technician.certifications
-          .split(',')
-          .map((cert) => cert.trim())
-          .filter(Boolean);
+          : [];
+        const tData = {
+          user_id: userRow.id,
+          login_id: loginId,
+          services: mappedServices,
+          specialties: [],
+          pickup_service: !!technician?.pickupService,
+          pickup_fee: Number(technician?.pickupFee ?? 0) || 0,
+          payment_methods: Array.isArray(technician?.paymentMethods) ? technician.paymentMethods : [],
+        };
+        if (technician?.certifications) {
+          tData.specialties = technician.certifications
+            .split(',')
+            .map((cert) => cert.trim())
+            .filter(Boolean);
+        }
+        await client.query(
+          'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+          [tData.user_id, tData.login_id, JSON.stringify(tData.services), JSON.stringify(tData.specialties), tData.pickup_service, tData.pickup_fee, JSON.stringify(tData.payment_methods)]
+        );
       }
-      await pool.query(
-        'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [tData.user_id, tData.login_id, JSON.stringify(tData.services), JSON.stringify(tData.specialties), tData.pickup_service, tData.pickup_fee, JSON.stringify(tData.payment_methods)]
-      );
+
+      await client.query('COMMIT');
+      console.log(`[Register] Transaction committed for ${email}.`);
+
+      return res.status(201).json({
+        _id: userRow.id,
+        name: userRow.name,
+        email: userRow.email,
+        role: userRow.role,
+        phone: userRow.phone,
+        cpfCnpj: userRow.cpf_cnpj,
+        address: userRow.address || {},
+        bankInfo: userRow.bank_info || {},
+        emailVerified: userRow.email_verified,
+        adFreeUntil: userRow.ad_free_until || null,
+        isAdFree: userRow.ad_free_until ? new Date(userRow.ad_free_until) > new Date() : false,
+        ...(loginId ? { loginId } : {}),
+        token: (function () {
+          const t = generateToken(userRow.id);
+          try {
+            const decoded = jwt.decode(t);
+            const pool = getPool();
+            pool.query('UPDATE users SET current_jti=$1 WHERE id=$2', [decoded.jti, userRow.id]).catch(() => { });
+            res.cookie('token', t, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
+          } catch { }
+          return t;
+        })(),
+        message: 'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
+      });
+
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error(`[Register] Transaction failed for ${email}:`, err);
+      throw err;
+    } finally {
+      client.release();
     }
-    return res.status(201).json({
-      _id: userRow.id,
-      name: userRow.name,
-      email: userRow.email,
-      role: userRow.role,
-      phone: userRow.phone,
-      cpfCnpj: userRow.cpf_cnpj,
-      address: userRow.address || {},
-      bankInfo: userRow.bank_info || {},
-      emailVerified: userRow.email_verified,
-      adFreeUntil: userRow.ad_free_until || null,
-      isAdFree: userRow.ad_free_until ? new Date(userRow.ad_free_until) > new Date() : false,
-      ...(loginId ? { loginId } : {}),
-      token: (function(){
-        const t = generateToken(userRow.id);
-        try {
-          const decoded = jwt.decode(t);
-          const pool = getPool();
-          pool.query('UPDATE users SET current_jti=$1 WHERE id=$2', [decoded.jti, userRow.id]).catch(()=>{});
-          res.cookie('token', t, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
-        } catch {}
-        return t;
-      })(),
-      message: 'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
-    });
+
   } catch (error) {
     console.error('Erro ao registrar usuário:', error?.message || error);
-    // Se um status já foi definido anteriormente (ex.: 400 Usuário já cadastrado),
-    // preserve-o e apenas propague o erro original.
     if (!res.statusCode || res.statusCode === 200) {
-      // Status não definido ou OK: tratar como erro interno
       res.status(500);
       throw new Error('Serviço temporariamente indisponível. Tente novamente mais tarde.');
     } else {
-      // Status já definido (ex.: 400/401): apenas rethrow para o errorHandler responder corretamente
       throw error;
     }
   }
@@ -666,10 +696,10 @@ const updateUserProfile = asyncHandler(async (req, res) => {
   } catch (error) {
     // Modo de demonstração (sem banco de dados)
     console.log('Usando modo de demonstração para updateUserProfile'.yellow);
-    
+
     // Encontrar usuário demo pelo ID
     const demoUserIndex = demoUsers.findIndex(u => u._id === req.user._id);
-    
+
     if (demoUserIndex !== -1) {
       // Atualizar usuário demo
       demoUsers[demoUserIndex] = {
@@ -687,9 +717,9 @@ const updateUserProfile = asyncHandler(async (req, res) => {
           pixKey: req.body.bankInfo.pixKey || demoUsers[demoUserIndex].bankInfo?.pixKey,
         } : demoUsers[demoUserIndex].bankInfo,
       };
-      
+
       const updatedUser = demoUsers[demoUserIndex];
-      
+
       res.status(200).json({
         _id: updatedUser._id,
         name: updatedUser.name,
@@ -781,16 +811,75 @@ const forgotPassword = asyncHandler(async (req, res) => {
   } catch (error) {
     // Modo de demonstração (sem banco de dados)
     console.log('Usando modo de demonstração para forgotPassword'.yellow);
-    
+
     // Verificar se o usuário existe no modo demo
     const demoUser = demoUsers.find(u => u.email === email);
-    
+
     if (demoUser) {
       res.status(200).json({ message: 'Instruções para redefinir a senha foram enviadas para o seu email (modo demo)' });
     } else {
       res.status(404);
       throw new Error('Usuário não encontrado (modo demo)');
     }
+  }
+});
+
+// @desc    Listar todos os técnicos
+// @route   GET /api/users/technicians
+// @access  Private
+const getTechnicians = asyncHandler(async (req, res) => {
+  if (isDemo) {
+    const techs = demoUsers.filter(u => u.role === 'technician').map(u => ({
+      _id: u._id,
+      name: u.name,
+      specialties: u.services ? u.services.map(s => s.name) : [],
+      rating: 5.0, // Mock rating
+      distance: (Math.random() * 10).toFixed(1), // Mock distance
+    }));
+    return res.json(techs);
+  }
+
+  try {
+    const pool = getPool();
+    // Join users and technicians to get details
+    const query = `
+      SELECT u.id, u.name, t.specialties, t.services 
+      FROM users u 
+      JOIN technicians t ON u.id = t.user_id 
+      WHERE u.role = 'technician'
+    `;
+    const result = await pool.query(query);
+
+    const technicians = result.rows.map(row => {
+      let specialties = [];
+      try {
+        specialties = typeof row.specialties === 'string' ? JSON.parse(row.specialties) : row.specialties;
+      } catch (e) { specialties = []; }
+
+      // If no specialties, try to get from services
+      if (!specialties || specialties.length === 0) {
+        try {
+          const services = typeof row.services === 'string' ? JSON.parse(row.services) : row.services;
+          if (Array.isArray(services)) {
+            specialties = services.map(s => s.name);
+          }
+        } catch (e) { }
+      }
+
+      return {
+        _id: row.id,
+        name: row.name,
+        specialties: specialties || [],
+        rating: 5.0, // Placeholder until rating system is implemented
+        distance: (Math.random() * 10).toFixed(1) // Placeholder until geolocation is implemented
+      };
+    });
+
+    res.json(technicians);
+  } catch (error) {
+    console.error('Erro ao buscar técnicos:', error);
+    res.status(500);
+    throw new Error('Erro ao buscar lista de técnicos');
   }
 });
 
@@ -817,10 +906,43 @@ const logoutUser = asyncHandler(async (req, res) => {
     if (req.user) {
       logLogout({ id: req.user._id || req.user.id, email: req.user.email }, req);
     }
-    try { res.clearCookie('token', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' }); } catch {}
+    try { res.clearCookie('token', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' }); } catch { }
     return res.status(200).json({ message: 'Logout efetuado com sucesso' });
   } catch (e) {
     return res.status(200).json({ message: 'Logout efetuado' });
+  }
+});
+
+// Debug: contagens e existência de tabelas (apenas para desenvolvimento)
+const getDebug = asyncHandler(async (req, res) => {
+  try {
+    const pool = getPool();
+    const existsRs = await pool.query("SELECT to_regclass('public.users') AS users, to_regclass('public.technicians') AS technicians");
+    const usersExists = !!existsRs.rows[0].users;
+    const techsExists = !!existsRs.rows[0].technicians;
+    let countUsers = 0, countTechs = 0, recent = [];
+    if (usersExists) {
+      const cu = await pool.query('SELECT COUNT(*)::int AS c FROM users');
+      countUsers = cu.rows[0].c;
+      const ru = await pool.query('SELECT id,email,role,created_at FROM users ORDER BY created_at DESC NULLS LAST LIMIT 5');
+      recent = ru.rows;
+    }
+    if (techsExists) {
+      const ct = await pool.query('SELECT COUNT(*)::int AS c FROM technicians');
+      countTechs = ct.rows[0].c;
+    }
+    const url = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
+    const safeUrl = url.replace(/:[^:@/]+@/, '://****@');
+    return res.status(200).json({
+      env: process.env.NODE_ENV,
+      ssl: (process.env.POSTGRES_SSL || ((process.env.NODE_ENV === 'production') ? 'true' : 'false')),
+      dbUrl: safeUrl,
+      tables: { users: usersExists, technicians: techsExists },
+      counts: { users: countUsers, technicians: countTechs },
+      recentUsers: recent,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message || String(e) });
   }
 });
 
@@ -835,4 +957,6 @@ module.exports = {
   verifyEmail,
   resendVerificationEmail,
   logoutUser,
+  getDebug,
+  getTechnicians,
 };

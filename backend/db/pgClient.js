@@ -11,7 +11,7 @@ function getPool() {
     const sslEnabled = (process.env.POSTGRES_SSL || defaultSsl) === 'true';
     const max = Number(process.env.PG_POOL_MAX || 10);
     const idleTimeoutMillis = Number(process.env.PG_POOL_IDLE || 30000);
-    const connectionTimeoutMillis = Number(process.env.PG_CONN_TIMEOUT || 5000);
+    const connectionTimeoutMillis = Number(process.env.PG_CONN_TIMEOUT || 20000);
     poolInstance = new pg.Pool({
       connectionString: url,
       ssl: sslEnabled ? { rejectUnauthorized: false } : false,
@@ -20,8 +20,10 @@ function getPool() {
       connectionTimeoutMillis,
       keepAlive: true,
     });
-    poolInstance.on('error', async () => {
-      try { await poolInstance.end(); } catch {}
+    console.log(`PG Pool initialized. Host: ${url.split('@')[1]?.split('/')[0] || 'hidden'}, SSL: ${sslEnabled}`.cyan);
+    poolInstance.on('error', async (err) => {
+      console.error('Unexpected error on idle client', err);
+      try { await poolInstance.end(); } catch { }
       poolInstance = null;
     });
   }

@@ -11,6 +11,8 @@ const {
   verifyEmail,
   resendVerificationEmail,
   logoutUser,
+  getTechnicians,
+  getDebug,
 } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 const { logLogin } = require('../middleware/auditLogger');
@@ -22,7 +24,9 @@ const { logLogin } = require('../middleware/auditLogger');
 router.post('/', registerUser);
 router.post('/login', loginUser);
 router.post('/technician-login', loginTechnician);
+router.get('/technicians', protect, getTechnicians);
 router.get('/me', protect, getMe);
+router.get('/debug', getDebug);
 router.put('/profile', protect, updateUserProfile);
 router.post('/upgrade-to-technician', protect, upgradeToTechnician);
 router.post('/forgot-password', forgotPassword);

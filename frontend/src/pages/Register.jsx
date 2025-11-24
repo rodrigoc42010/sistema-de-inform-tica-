@@ -329,6 +329,13 @@ function Register() {
         try {
           const token = u?.token || localStorage.getItem('token');
           if (token) {
+            if (userType === 'technician') {
+              try {
+                await axios.post('/api/users/upgrade-to-technician', { technician: technicianData }, { headers: { Authorization: `Bearer ${token}` } });
+              } catch (e) {
+                // Prosseguir mesmo se já for técnico ou se backend retornar 200
+              }
+            }
             const me = await axios.get('/api/users/me', { headers: { Authorization: `Bearer ${token}` } });
             if (me?.data) {
               dispatch(setUser(me.data));

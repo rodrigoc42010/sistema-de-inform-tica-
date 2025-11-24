@@ -18,6 +18,7 @@ const createTicket = asyncHandler(async (req, res) => {
     initialDiagnosis,
     pickupRequested,
     pickupAddress,
+    technician,
   } = req.body;
 
   if (!title || !description) {
@@ -26,8 +27,28 @@ const createTicket = asyncHandler(async (req, res) => {
   }
 
   const pool = getPool();
+
+  // Se não foi fornecido um técnico, atribuir automaticamente
+  let assignedTechnician = technician;
+
+  if (!assignedTechnician) {
+    // Buscar técnicos disponíveis (pode ser melhorado com lógica de proximidade, especialidade, etc.)
+    const techQuery = await pool.query(
+      `SELECT u.id FROM users u 
+       JOIN technicians t ON u.id = t.user_id 
+       WHERE u.role = 'technician' 
+       ORDER BY RANDOM() 
+       LIMIT 1`
+    );
+
+    if (techQuery.rowCount > 0) {
+      assignedTechnician = techQuery.rows[0].id;
+      console.log('Auto-assigned technician:', assignedTechnician);
+    }
+  }
+
   const inserted = await pool.query(
-    'INSERT INTO tickets (title,description,priority,device_type,device_brand,device_model,attachments,service_items,initial_diagnosis,pickup_requested,pickup_address,client,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *',
+    'INSERT INTO tickets (title,description,priority,device_type,device_brand,device_model,attachments,service_items,initial_diagnosis,pickup_requested,pickup_address,client,technician,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *',
     [
       title,
       description,
@@ -41,6 +62,7 @@ const createTicket = asyncHandler(async (req, res) => {
       !!pickupRequested,
       pickupAddress ? JSON.stringify(pickupAddress) : null,
       req.user.id || req.user._id,
+      assignedTechnician || null,
       'aberto',
     ]
   );

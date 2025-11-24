@@ -101,7 +101,7 @@ app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'geolocation=(
 app.use(hpp());
 app.use(mongoSanitize());
 // Sanitização de entrada (substitui xss-clean)
-const xssOptions = { whiteList: {}, stripIgnoreTag: true, stripIgnoreTagBody: ['script','style','iframe'] };
+const xssOptions = { whiteList: {}, stripIgnoreTag: true, stripIgnoreTagBody: ['script', 'style', 'iframe'] };
 const sanitizeString = (s) => (typeof s === 'string' ? xss(s, xssOptions) : s);
 const deepSanitize = (val) => {
   if (val == null) return val;
@@ -201,7 +201,7 @@ app.use((req, res, next) => {
         success: res.statusCode >= 200 && res.statusCode < 400,
         status: res.statusCode
       };
-      fs.appendFile(path.join(logsDir, 'login-audit.log'), JSON.stringify(entry) + '\n', () => {});
+      fs.appendFile(path.join(logsDir, 'login-audit.log'), JSON.stringify(entry) + '\n', () => { });
     } catch (err) {
       console.error('Falha ao gravar log de login:', err?.message || err);
     }
@@ -238,6 +238,7 @@ app.use('/api/tickets', require('./routes/ticketRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/uploads', require('./routes/uploadRoutes'));
 app.use('/api/ads', require('./routes/adRoutes'));
+app.use('/api/services', require('./routes/serviceRoutes'));
 
 // Utilidades: CEP (proxy ViaCEP)
 app.get('/api/cep/:cep', async (req, res) => {
