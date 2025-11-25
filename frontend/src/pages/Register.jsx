@@ -324,6 +324,31 @@ function Register() {
 
     console.log('Submitting register payload', userData);
     dispatch(register(userData))
+      .unwrap()
+      .then(async (u) => {
+        try {
+          const token = u?.token || localStorage.getItem('token');
+          if (token && userType === 'technician') {
+            try {
+              await axios.post('/api/users/upgrade-to-technician', { technician: technicianData }, { headers: { Authorization: `Bearer ${token}` } });
+            } catch (e) {}
+          }
+          if (token) {
+            try {
+              const me = await axios.get('/api/users/me', { headers: { Authorization: `Bearer ${token}` } });
+              const role = me?.data?.role || u?.role || userType;
+              navigate(role === 'technician' ? '/technician/dashboard' : '/client/dashboard');
+              return;
+            } catch {}
+          }
+          navigate((u?.role || userType) === 'technician' ? '/technician/dashboard' : '/client/dashboard');
+        } catch (err) {
+          toast.error(typeof err === 'string' ? err : (err?.message || 'Falha ao registrar'));
+        }
+      })
+      .catch((err) => {
+        toast.error(typeof err === 'string' ? err : (err?.message || 'Falha ao registrar'));
+      });
   };
 
   const toggleShowPassword = () => {
