@@ -240,11 +240,12 @@ function Login() {
                 </form>
 
                 <Box mt={2} textAlign="center">
-                  <Link to="/forgot-password">
+                  <Link to="/forgot-password" style={{ textDecoration: 'none' }}>
                     <Typography variant="body2" color="primary">
                       Esqueceu a senha?
                     </Typography>
-                    <Paper elevation={0} sx={{ p: 2, height: '100%' }} className="rank-panel">
+                  </Link>
+                  <Paper elevation={0} sx={{ p: 2, height: '100%' }} className="rank-panel">
                       <Typography variant="h6" gutterBottom>
                         Melhores técnicos{region.city || region.state ? ` em ${region.city || ''}${region.state ? (region.city ? ', ' : '') + region.state : ''}` : ''}
                       </Typography>
@@ -271,12 +272,15 @@ function Login() {
                           <Typography variant="body2" color="text.secondary" className="rank-empty">Sem dados de ranking nesta região ainda.</Typography>
                         )}
                       </List>
-                    </Paper>
-                  </Grid>
-                </Grid>
-              </Container>
-            </Box>
-            );
+                  </Paper>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Container>
+    </Box>
+  );
 }
 
-            export default Login;
+export default Login;
