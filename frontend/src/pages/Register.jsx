@@ -805,7 +805,7 @@ function Register() {
                     </Typography>
                     <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                       <FormControlLabel
-                        control={<Checkbox checked={termsAccepted} onChange={() => setTermsOpen(true)} />}
+                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
                         label="Li e concordo com os Termos de Uso e a Política de Privacidade"
                       />
                       <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
@@ -820,7 +820,7 @@ function Register() {
                     </Typography>
                     <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                       <FormControlLabel
-                        control={<Checkbox checked={termsAccepted} onChange={() => setTermsOpen(true)} />}
+                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
                         label="Li e concordo com os Termos de Uso e a Política de Privacidade"
                       />
                       <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
