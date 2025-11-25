@@ -103,7 +103,7 @@ function Login() {
     }));
   };
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
 
     const userData =
@@ -111,7 +111,14 @@ function Login() {
         ? { cpfCnpj: cpfCnpj || email, password, role: 'technician' }
         : { email, password, role: 'client' };
 
-    dispatch(login(userData));
+    try {
+      const u = await dispatch(login(userData)).unwrap();
+      const role = u?.role || userType;
+      navigate(role === 'technician' ? '/technician/dashboard' : '/client/dashboard');
+    } catch (err) {
+      const message = (err?.response && err?.response?.data && err?.response?.data?.message) || err?.message || 'Falha ao entrar';
+      toast.error(message);
+    }
   };
 
   // Removidos: handlers de login social (Google/Microsoft)
