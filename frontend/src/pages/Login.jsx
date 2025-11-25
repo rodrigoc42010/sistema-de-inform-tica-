@@ -244,58 +244,39 @@ function Login() {
                     <Typography variant="body2" color="primary">
                       Esqueceu a senha?
                     </Typography>
-                  </Link>
-                </Box>
-
-                {/* Removido: divisão e botões de login social */}
-
-                <Box mt={3} textAlign="center">
-                  <Typography variant="body2">
-                    Não tem uma conta?{' '}
-                    <Link to="/register">
-                      <Typography component="span" variant="body2" color="primary">
-                        Registre-se
+                    <Paper elevation={0} sx={{ p: 2, height: '100%' }} className="rank-panel">
+                      <Typography variant="h6" gutterBottom>
+                        Melhores técnicos{region.city || region.state ? ` em ${region.city || ''}${region.state ? (region.city ? ', ' : '') + region.state : ''}` : ''}
                       </Typography>
-                    </Link>
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={5} lg={5}>
-            <Paper elevation={0} sx={{ p: 2, height: '100%' }} className="rank-panel">
-              <Typography variant="h6" gutterBottom>
-                Melhores técnicos{region.city || region.state ? ` em ${region.city || ''}${region.state ? (region.city ? ', ' : '') + region.state : ''}` : ''}
-              </Typography>
-              <List>
-                {Array.isArray(topTechnicians) && topTechnicians.map((t, idx) => (
-                  <ListItem key={t.userId || t.technicianId} alignItems="flex-start" className={animateRank ? 'rank-item' : ''} style={{ animationDelay: `${idx * 120}ms` }}>
-                    <ListItemAvatar>
-                      <Avatar>{(t.name || '?').charAt(0)}</Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={t.name || 'Técnico'}
-                      secondary={
-                        <React.Fragment>
-                          <Rating value={Number(t.rating || 0)} precision={0.5} readOnly size="small" />
-                          <Typography component="span" variant="caption" sx={{ ml: 1 }}>
-                            ({t.totalReviews || 0})
-                          </Typography>
-                        </React.Fragment>
-                      }
-                    />
-                  </ListItem>
-                ))}
-                {(!Array.isArray(topTechnicians) || topTechnicians.length === 0) && (
-                  <Typography variant="body2" color="text.secondary" className="rank-empty">Sem dados de ranking nesta região ainda.</Typography>
-                )}
-              </List>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
-    </Box>
-  );
+                      <List>
+                        {Array.isArray(topTechnicians) && topTechnicians.map((t, idx) => (
+                          <ListItem key={t.userId || t.technicianId} alignItems="flex-start" className={animateRank ? 'rank-item' : ''} style={{ animationDelay: `${idx * 120}ms` }}>
+                            <ListItemAvatar>
+                              <Avatar>{(t.name || '?').charAt(0)}</Avatar>
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={t.name || 'Técnico'}
+                              secondary={
+                                <React.Fragment>
+                                  <Rating value={Number(t.rating || 0)} precision={0.5} readOnly size="small" />
+                                  <Typography component="span" variant="caption" sx={{ ml: 1 }}>
+                                    ({t.totalReviews || 0})
+                                  </Typography>
+                                </React.Fragment>
+                              }
+                            />
+                          </ListItem>
+                        ))}
+                        {(!Array.isArray(topTechnicians) || topTechnicians.length === 0) && (
+                          <Typography variant="body2" color="text.secondary" className="rank-empty">Sem dados de ranking nesta região ainda.</Typography>
+                        )}
+                      </List>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Container>
+            </Box>
+            );
 }
 
-export default Login;
+            export default Login;

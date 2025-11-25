@@ -66,7 +66,7 @@ const availableServices = [
   { id: 8, name: 'Instalação de Periféricos', defaultPrice: 40 },
   { id: 9, name: 'Atualização de Hardware', defaultPrice: 100 },
   { id: 10, name: 'Suporte Remoto', defaultPrice: 60 },
-  
+
   // Serviços de Celulares
   { id: 11, name: 'Troca de Tela de Celular', defaultPrice: 120 },
   { id: 12, name: 'Troca de Bateria', defaultPrice: 80 },
@@ -76,7 +76,7 @@ const availableServices = [
   { id: 16, name: 'Reparo de Botões e Conectores', defaultPrice: 60 },
   { id: 17, name: 'Limpeza e Manutenção', defaultPrice: 40 },
   { id: 18, name: 'Recuperação de Dados Móveis', defaultPrice: 100 },
-  
+
   // Serviços de Videogames
   { id: 19, name: 'Limpeza de Console', defaultPrice: 60 },
   { id: 20, name: 'Troca de Pasta Térmica', defaultPrice: 80 },
@@ -97,7 +97,7 @@ function Register() {
   const [termsOpen, setTermsOpen] = useState(false);
   const [termsScrolled, setTermsScrolled] = useState(false);
   const [termsAgreeChecked, setTermsAgreeChecked] = useState(false);
-  
+
   // Dados básicos (etapa 1)
   const [basicData, setBasicData] = useState({
     name: '',
@@ -107,7 +107,7 @@ function Register() {
     phone: '',
     cpfCnpj: '',
   });
-  
+
   // Dados de endereço (etapa 2)
   const [addressData, setAddressData] = useState({
     street: '',
@@ -119,7 +119,7 @@ function Register() {
     country: '',
     zipCode: '',
   });
-  
+
   // Dados específicos para técnicos (etapa 3)
   const [technicianData, setTechnicianData] = useState({
     services: [],
@@ -171,17 +171,17 @@ function Register() {
       toast.error('Por favor, preencha todos os campos obrigatórios');
       return false;
     }
-    
+
     if (basicData.password !== basicData.confirmPassword) {
       toast.error('As senhas não coincidem');
       return false;
     }
-    
+
     if (basicData.password.length < 6) {
       toast.error('A senha deve ter pelo menos 6 caracteres');
       return false;
     }
-    
+
     return true;
   };
 
@@ -190,7 +190,7 @@ function Register() {
       toast.error('Por favor, preencha todos os campos obrigatórios de endereço');
       return false;
     }
-    
+
     return true;
   };
 
@@ -238,12 +238,12 @@ function Register() {
 
   const handleTechnicianDataChange = (e) => {
     const { name, value, checked, type } = e.target;
-    
+
     if (name === 'services') {
       // Tratamento especial para serviços selecionados
       const serviceId = parseInt(value);
       const service = availableServices.find(s => s.id === serviceId);
-      
+
       if (checked) {
         // Adicionar serviço
         setTechnicianData({
@@ -290,7 +290,7 @@ function Register() {
   const handleServicePriceChange = (serviceId, price) => {
     setTechnicianData({
       ...technicianData,
-      services: technicianData.services.map(service => 
+      services: technicianData.services.map(service =>
         service.id === serviceId ? { ...service, initialPrice: price } : service
       )
     });
@@ -298,7 +298,7 @@ function Register() {
 
   const onSubmit = (e) => {
     e.preventDefault();
-    
+
     if (!termsAccepted) {
       toast.error('Você precisa aceitar os Termos de Uso e a Política de Privacidade');
       setTermsOpen(true);
@@ -316,40 +316,14 @@ function Register() {
       address: addressData,
       termsAccepted: true,
     };
-    
+
     // Adicionar dados específicos para técnicos
     if (userType === 'technician') {
       userData.technician = technicianData;
     }
-    
+
     console.log('Submitting register payload', userData);
     dispatch(register(userData))
-      .unwrap()
-      .then(async (u) => {
-        try {
-          const token = u?.token || localStorage.getItem('token');
-          if (token) {
-            if (userType === 'technician') {
-              try {
-                await axios.post('/api/users/upgrade-to-technician', { technician: technicianData }, { headers: { Authorization: `Bearer ${token}` } });
-              } catch (e) {
-                // Prosseguir mesmo se já for técnico ou se backend retornar 200
-              }
-            }
-            const me = await axios.get('/api/users/me', { headers: { Authorization: `Bearer ${token}` } });
-            if (me?.data) {
-              dispatch(setUser(me.data));
-              const role = me.data.role || u?.role;
-              navigate(role === 'technician' ? '/technician/dashboard' : '/client/dashboard');
-              return;
-            }
-          }
-        } catch {}
-        navigate(u?.role === 'technician' ? '/technician/dashboard' : '/client/dashboard');
-      })
-      .catch((err) => {
-        toast.error(typeof err === 'string' ? err : (err?.message || 'Falha ao registrar'));
-      });
   };
 
   const toggleShowPassword = () => {

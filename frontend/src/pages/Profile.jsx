@@ -50,7 +50,7 @@ function Profile() {
     { id: 'sess_1', device: 'Chrome no Windows', location: 'São Paulo, BR', ip: '192.168.1.10', lastActive: 'Agora', current: true },
     { id: 'sess_2', device: 'Safari no iPhone', location: 'Campinas, BR', ip: '192.168.1.22', lastActive: 'Ontem às 20:14', current: false },
   ]);
-  
+
   // User data from Redux state
   const [userData, setUserData] = useState({
     name: user?.name || 'Nome do Usuário',
@@ -113,7 +113,7 @@ function Profile() {
           },
         }),
       };
-      
+
       setUserData(updatedUserData);
       setFormData({
         ...updatedUserData,
@@ -143,7 +143,7 @@ function Profile() {
     setUserData(formData);
     setEditMode(false);
     setSuccessMessage('Perfil atualizado com sucesso!');
-    
+
     setTimeout(() => {
       setSuccessMessage('');
     }, 3000);
@@ -250,6 +250,10 @@ function Profile() {
                 Meu Perfil
               </Typography>
               <Box>
+                {/* DEBUG INFO */}
+                <pre style={{ background: '#f0f0f0', padding: '10px', fontSize: '10px', maxWidth: '300px', overflow: 'auto' }}>
+                  {JSON.stringify(user, null, 2)}
+                </pre>
                 {editMode ? (
                   <>
                     <Button
@@ -307,10 +311,10 @@ function Profile() {
                     '&:hover': { backgroundColor: '#f5f5f5' },
                   }}
                 >
-                  <input 
-                    hidden 
-                    accept="image/*" 
-                    type="file" 
+                  <input
+                    hidden
+                    accept="image/*"
+                    type="file"
                     onChange={handlePhotoUpload}
                   />
                   <PhotoCameraIcon />
@@ -495,20 +499,20 @@ function Profile() {
                 <Typography variant="body2" color="textSecondary" paragraph>
                   Gerencie seus serviços na página de Serviços para adicionar, editar ou remover serviços.
                 </Typography>
-                <Button 
-                  variant="contained" 
+                <Button
+                  variant="contained"
                   color="primary"
                   onClick={() => navigate('/technician/services')}
                 >
                   Ir para Serviços
                 </Button>
-                
+
                 <Divider sx={{ my: 3 }} />
-                
+
                 <Typography variant="h6" gutterBottom>
                   Serviços Atuais
                 </Typography>
-                
+
                 <Grid container spacing={2} sx={{ mt: 1 }}>
                   {userData.services && userData.services.length > 0 ? (
                     userData.services.map((service, index) => (

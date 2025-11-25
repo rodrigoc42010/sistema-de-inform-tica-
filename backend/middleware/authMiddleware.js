@@ -44,7 +44,14 @@ const protect = asyncHandler(async (req, res, next) => {
           res.status(401);
           throw new Error('Não autorizado, usuário não encontrado');
         }
-        const userRow = rs.rows[0];
+        let userRow = rs.rows[0];
+        try {
+          const rtech = await pool.query('SELECT 1 FROM technicians WHERE user_id=$1 LIMIT 1', [userRow.id]);
+          if (rtech.rowCount && userRow.role !== 'technician') {
+            await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', userRow.id]);
+            userRow = { ...userRow, role: 'technician' };
+          }
+        } catch {}
         if (!allowMulti && userRow.current_jti && userRow.current_jti !== decoded.jti) {
           res.status(401);
           throw new Error('Sessão inválida');

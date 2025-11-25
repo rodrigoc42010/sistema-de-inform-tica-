@@ -98,7 +98,7 @@ function Sidebar() {
     dispatch(reset());
     navigate('/');
   };
-  
+
   const handleNewTicket = () => {
     navigate('/client/new-ticket');
   };
@@ -175,6 +175,15 @@ function Sidebar() {
 
   const menuItems = user?.role === 'technician' ? technicianMenuItems : clientMenuItems;
 
+  useEffect(() => {
+    const seg = location.pathname.split('/')[1];
+    if (user?.role === 'technician' && seg === 'client') {
+      navigate('/technician/dashboard', { replace: true });
+    } else if (user?.role === 'client' && seg === 'technician') {
+      navigate('/client/dashboard', { replace: true });
+    }
+  }, [user?.role, location.pathname, navigate]);
+
   const drawer = (
     <>
       <Toolbar sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: [1] }}>
@@ -208,8 +217,8 @@ function Sidebar() {
       <Divider />
       <List>
         <ListItem disablePadding>
-          <ListItemButton 
-            component={Link} 
+          <ListItemButton
+            component={Link}
             to={`/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/profile`}
             selected={location.pathname === `/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/profile`}
           >
@@ -220,8 +229,8 @@ function Sidebar() {
           </ListItemButton>
         </ListItem>
         <ListItem disablePadding>
-          <ListItemButton 
-            component={Link} 
+          <ListItemButton
+            component={Link}
             to={`/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/settings`}
             selected={location.pathname === `/${(user?.role || (location.pathname.split('/')[1] === 'technician' ? 'technician' : 'client'))}/settings`}
           >

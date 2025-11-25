@@ -592,14 +592,20 @@ const getMe = asyncHandler(async (req, res) => {
     throw new Error('Usuário não encontrado');
   }
   const user = rsUser.rows[0];
-  if (user.role === 'technician') {
+  let effectiveRole = user.role;
+  const rsTechCheck = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
+  if (rsTechCheck.rowCount && effectiveRole !== 'technician') {
+    effectiveRole = 'technician';
+    try { await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', user.id]); } catch {}
+  }
+  if (effectiveRole === 'technician') {
     const rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
     const tech = rsTech.rowCount ? rsTech.rows[0] : null;
     return res.status(200).json({
       _id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: effectiveRole,
       phone: user.phone,
       cpfCnpj: user.cpf_cnpj,
       address: user.address || {},
@@ -617,7 +623,7 @@ const getMe = asyncHandler(async (req, res) => {
     _id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: effectiveRole,
     phone: user.phone,
     cpfCnpj: user.cpf_cnpj,
     address: user.address || {},
