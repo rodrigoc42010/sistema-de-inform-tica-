@@ -97,7 +97,7 @@ app.use(helmet.referrerPolicy({ policy: 'no-referrer' }));
 app.use(helmet.crossOriginEmbedderPolicy());
 app.use(helmet.crossOriginOpenerPolicy());
 app.use(helmet.crossOriginResourcePolicy({ policy: 'same-site' }));
-app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()'); next(); });
+app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=(), camera=()'); next(); });
 app.use(hpp());
 app.use(mongoSanitize());
 // Sanitização de entrada (substitui xss-clean)

@@ -251,9 +251,7 @@ function Profile() {
               </Typography>
               <Box>
                 {/* DEBUG INFO */}
-                <pre style={{ background: '#f0f0f0', padding: '10px', fontSize: '10px', maxWidth: '300px', overflow: 'auto' }}>
-                  {JSON.stringify(user, null, 2)}
-                </pre>
+
                 {editMode ? (
                   <>
                     <Button
