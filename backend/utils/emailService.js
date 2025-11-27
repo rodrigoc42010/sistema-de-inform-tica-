@@ -8,18 +8,27 @@ const createTransporter = async () => {
         port: Number(process.env.EMAIL_PORT || 587),
         secure: false,
         auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+        tls: { rejectUnauthorized: false },
       });
     }
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    });
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      return nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+        tls: { rejectUnauthorized: false },
+      });
+    }
+    if (process.env.DISABLE_EMAIL_VERIFICATION === 'true') {
+      return { sendMail: async () => ({ messageId: 'email-verification-disabled' }) };
+    }
+    return { sendMail: async () => ({ messageId: 'email-verification-disabled' }) };
   } else {
     const testAccount = await nodemailer.createTestAccount();
     return nodemailer.createTransport({
       host: 'smtp.ethereal.email',
       port: 587,
       auth: { user: testAccount.user, pass: testAccount.pass },
+      tls: { rejectUnauthorized: false },
     });
   }
 };
