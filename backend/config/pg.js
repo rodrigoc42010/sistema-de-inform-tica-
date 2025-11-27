@@ -206,6 +206,17 @@ async function initPostgres() {
         );
       `);
 
+      await client.query('ALTER TABLE public.users ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.technicians ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.ads ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.plans ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.payment_logs ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.blacklisted_tokens ENABLE ROW LEVEL SECURITY');
+      await client.query('ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY');
+
       await client.query(`
         CREATE TABLE IF NOT EXISTS analytics_events (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
