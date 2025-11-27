@@ -1,9 +1,23 @@
 const axios = require('axios');
 
-const API_URL = 'https://sistema-de-inform-tica.onrender.com/api';
+const API_URL = 'https://sistema-de-inform-tica-g40q.onrender.com/api';
 
 async function testProduction() {
     console.log(`🚀 Testando API de Produção: ${API_URL}\n`);
+
+    // 0. Teste de Status e DB
+    try {
+        console.log('0. Verificando status do servidor e conexão com DB...');
+        const statusRes = await axios.get(`${API_URL}/status`);
+        console.log('✅ Status:', statusRes.data);
+        if (!statusRes.data.dbConnected) {
+            console.error('❌ ERRO CRÍTICO: O servidor diz que NÃO está conectado ao banco de dados!');
+            console.error('   Verifique as variáveis de ambiente no Render.');
+            return;
+        }
+    } catch (error) {
+        console.error('❌ Falha ao verificar status:', error.message);
+    }
 
     // 1. Teste de Health Check (ou rota pública)
     try {
@@ -65,7 +79,7 @@ async function testProduction() {
         console.error('❌ FALHA NO REGISTRO:');
         if (error.response) {
             console.error('Status:', error.response.status);
-            console.error('Data:', error.response.data);
+            console.error('Data:', JSON.stringify(error.response.data, null, 2));
         } else {
             console.error('Erro:', error.message);
         }
