@@ -25,6 +25,7 @@ import {
   SportsEsports as SportsEsportsIcon,
   Computer as ComputerIcon,
 } from '@mui/icons-material';
+import DOMPurify from 'dompurify';
 
 // Evitar duplo fetch em desenvolvimento devido ao React.StrictMode
 const isDev = process.env.NODE_ENV === 'development';
@@ -136,7 +137,7 @@ const Home = () => {
         <Typography variant="h4" align="center" gutterBottom sx={{ mb: 4 }}>
           Serviços Especializados
         </Typography>
-        
+
         {/* Categorias de Serviços */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12} md={4}>
@@ -304,8 +305,8 @@ const Home = () => {
                         {start && end && <Chip size="small" label={`${start} - ${end}`} />}
                       </Box>
                       <Typography variant="h6" gutterBottom>{ad.title}</Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ minHeight: 56 }}>
-                        {ad.text}
+                      <Typography variant="body2" color="text.secondary" sx={{ minHeight: 56 }} component="div">
+                        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(ad.text) }} />
                       </Typography>
                       {showMetrics && (
                         <Typography variant="caption" color="text.secondary">

@@ -18,6 +18,9 @@ router.get('/mine', protect, technicianOnly, getMyAds);
 // Atualizar anúncio (somente autor)
 router.put('/:id', protect, technicianOnly, updateAd);
 
+// Pagar/Simular pagamento de anúncio
+router.post('/:id/pay', protect, technicianOnly, require('../controllers/adController').payAd);
+
 // Comprar remoção de anúncios (somente clientes)
 router.post('/purchase-remove', protect, clientOnly, purchaseAdRemoval);
 

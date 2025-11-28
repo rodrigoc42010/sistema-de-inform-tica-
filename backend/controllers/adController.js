@@ -4,28 +4,105 @@ const { getPool } = require('../db/pgClient');
 // Criar anúncio (técnico)
 // POST /api/ads
 // Private (technician)
+// Tabela de preços (em BRL)
+const AD_PRICING = {
+  basic: { 7: 19.90, 15: 34.90, 30: 59.90 },
+  intermediate: { 7: 29.90, 15: 54.90, 30: 99.90 },
+  premium: { 7: 49.90, 15: 89.90, 30: 159.90 }
+};
+
+// Criar anúncio (técnico)
+// POST /api/ads
+// Private (technician)
 const createAd = asyncHandler(async (req, res) => {
-  const { title, text, linkUrl, mediaUrl, audience, startDate, endDate } = req.body;
+  const { title, text, linkUrl, mediaUrl, audience, tier = 'basic', duration = 30 } = req.body;
+
   if (!title || !text) {
     res.status(400);
     throw new Error('Título e texto são obrigatórios');
   }
-  const pool = getPool();
-  const inserted = await pool.query(
-    'INSERT INTO ads (title,text,link_url,media_url,audience,start_date,end_date,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-    [title, text, linkUrl || null, mediaUrl || null, audience || 'client', startDate || null, endDate || null, req.user.id || req.user._id]
-  );
-  const ad = inserted.rows[0];
 
-  // Registrar taxa de postagem de anúncio (pendente), para administração/recebimento
-  try {
-    const feeAmount = Number(process.env.AD_POST_FEE_BRL || '4.9');
-    await pool.query('INSERT INTO payments (type, ad, technician, amount, currency, payment_method, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', ['ad_fee', ad.id, req.user.id || req.user._id, feeAmount, 'BRL', 'admin_fee', 'pendente', `Taxa de postagem de anúncio: ${title}`]);
-  } catch (e) {
-    // Não bloquear criação do anúncio por falha ao registrar pagamento
-    console.warn('Falha ao registrar taxa de anúncio:', e?.message || e);
-  }
+  // Validar plano e duração
+  const validTiers = ['basic', 'intermediate', 'premium'];
+  const validDurations = [7, 15, 30];
+
+  const selectedTier = validTiers.includes(tier) ? tier : 'basic';
+  const selectedDuration = validDurations.includes(Number(duration)) ? Number(duration) : 30;
+
+  // Calcular preço
+  const price = AD_PRICING[selectedTier][selectedDuration];
+
+  const pool = getPool();
+
+  // Inserir como pendente de pagamento
+  const inserted = await pool.query(
+    'INSERT INTO ads (title,text,link_url,media_url,audience,tier,duration_days,price,payment_status,status,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+    [
+      title,
+      text,
+      linkUrl || null,
+      mediaUrl || null,
+      audience || 'client',
+      selectedTier,
+      selectedDuration,
+      price,
+      'pending',
+      'pending_payment',
+      req.user.id || req.user._id
+    ]
+  );
+
+  const ad = inserted.rows[0];
   res.status(201).json(ad);
+});
+
+// Simular pagamento e ativar anúncio
+// POST /api/ads/:id/pay
+// Private (technician)
+const payAd = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const pool = getPool();
+
+  const rs = await pool.query('SELECT * FROM ads WHERE id=$1 LIMIT 1', [id]);
+  const ad = rs.rowCount ? rs.rows[0] : null;
+
+  if (!ad) {
+    res.status(404);
+    throw new Error('Anúncio não encontrado');
+  }
+
+  if (String(ad.created_by) !== String(req.user.id || req.user._id)) {
+    res.status(403);
+    throw new Error('Permissão negada');
+  }
+
+  if (ad.status === 'active') {
+    return res.status(200).json(ad);
+  }
+
+  // Calcular datas
+  const startDate = new Date();
+  const endDate = new Date();
+  endDate.setDate(startDate.getDate() + ad.duration_days);
+
+  // Atualizar para pago e ativo
+  await pool.query(
+    'UPDATE ads SET payment_status=$1, status=$2, start_date=$3, end_date=$4 WHERE id=$5',
+    ['paid', 'active', startDate, endDate, id]
+  );
+
+  // Registrar pagamento no histórico
+  try {
+    await pool.query(
+      'INSERT INTO payments (type, ad, technician, amount, currency, payment_method, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      ['ad_fee', ad.id, req.user.id || req.user._id, ad.price, 'BRL', 'simulation', 'paid', `Pagamento Anúncio ${ad.tier} (${ad.duration_days} dias)`]
+    );
+  } catch (e) {
+    console.warn('Erro ao registrar log de pagamento:', e);
+  }
+
+  const updated = await pool.query('SELECT * FROM ads WHERE id=$1', [id]);
+  res.status(200).json(updated.rows[0]);
 });
 
 // Listar anúncios ativos para o usuário atual (respeita adFree para clientes)
@@ -172,4 +249,5 @@ module.exports = {
   listPublicAds,
   getMyAds,
   updateAd,
+  payAd,
 };
