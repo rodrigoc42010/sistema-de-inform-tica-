@@ -106,16 +106,26 @@ function Profile() {
     }
   };
 
-  const handlePhotoUpload = (event) => {
+  const handlePhotoUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) return toast.error('Apenas imagens são permitidas');
     if (file.size > 5 * 1024 * 1024) return toast.error('Máximo 5MB');
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setFormData({ ...formData, profileImage: e.target.result });
-      toast.success('Foto atualizada! Salve para confirmar.');
+    reader.onload = async (e) => {
+      const newProfileImage = e.target.result;
+      setFormData({ ...formData, profileImage: newProfileImage });
+
+      // Auto-save the profile image immediately
+      try {
+        toast.info('Salvando foto...');
+        await dispatch(updateProfile({ ...formData, profileImage: newProfileImage })).unwrap();
+        setUserData({ ...formData, profileImage: newProfileImage });
+        toast.success('Foto atualizada com sucesso!');
+      } catch (error) {
+        toast.error(error || 'Erro ao salvar foto');
+      }
     };
     reader.readAsDataURL(file);
   };
