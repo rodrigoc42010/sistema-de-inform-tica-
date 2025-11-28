@@ -91,40 +91,40 @@ const Home = () => {
   return (
     <Box>
       {/* Hero */}
-      <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #f7f9fc 0%, #ffffff 100%)' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#fff' }}>
         <Container>
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={7}>
-              <Typography variant="h3" sx={{ fontWeight: 700 }} gutterBottom>
+              <Typography variant="h3" sx={{ fontWeight: 700, color: '#fff' }} gutterBottom>
                 Conecte clientes e técnicos especializados
               </Typography>
-              <Typography variant="h6" color="text.secondary" paragraph>
+              <Typography variant="h6" paragraph sx={{ color: 'rgba(255,255,255,0.9)', maxWidth: 800, lineHeight: 1.5 }}>
                 Encontre profissionais próximos para assistência técnica em informática, celulares e videogames. Gerencie seus chamados com transparência e divulgue serviços com anúncios. Pagamentos e recibos integrados, tudo em um só lugar.
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2 }}>
                 <Button variant="contained" startIcon={<BuildCircleIcon />} component={Link} to="/register">
                   Sou Cliente
                 </Button>
-                <Button variant="outlined" startIcon={<BuildCircleIcon />} component={Link} to="/register">
+                <Button variant="contained" startIcon={<BuildCircleIcon />} component={Link} to="/register">
                   Sou Técnico
                 </Button>
-                <Button variant="text" startIcon={<InfoIcon />} component={Link} to="/login">
+                <Button variant="contained" startIcon={<InfoIcon />} component={Link} to="/login">
                   Entrar
                 </Button>
               </Box>
             </Grid>
             <Grid item xs={12} md={5}>
-              <Paper elevation={0} sx={{ p: 3, border: '1px solid #eee', borderRadius: 2 }}>
+              <Paper elevation={0} sx={{ p: 3, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <CampaignIcon color="primary" sx={{ mr: 1 }} />
-                  <Typography variant="h6">Anúncios e experiência</Typography>
+                  <CampaignIcon sx={{ mr: 1, color: '#93c5fd' }} />
+                  <Typography variant="h6" sx={{ color: '#fff' }}>Anúncios e experiência</Typography>
                 </Box>
-                <Typography variant="body1" color="text.secondary" paragraph>
+                <Typography variant="body1" paragraph sx={{ color: 'rgba(255,255,255,0.85)' }}>
                   Técnicos podem promover seus serviços com anúncios visíveis para clientes. Cada postagem gera uma taxa administrativa transparente. Clientes podem optar por remover anúncios por período.
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  <Chip icon={<CampaignIcon />} label="Promoção de serviços" variant="outlined" />
-                  <Chip icon={<PaymentsIcon />} label="Taxa de postagem" variant="outlined" />
+                  <Chip icon={<CampaignIcon />} label="Promoção de serviços" sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }} />
+                  <Chip icon={<PaymentsIcon />} label="Taxa de postagem" sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }} />
                 </Box>
               </Paper>
             </Grid>

@@ -67,6 +67,25 @@ export const forgotPassword = createAsyncThunk(
   }
 );
 
+// Atualizar perfil
+export const updateProfile = createAsyncThunk(
+  'auth/updateProfile',
+  async (userData, thunkAPI) => {
+    try {
+      const token = thunkAPI.getState().auth.user.token;
+      return await authService.updateProfile(userData, token);
+    } catch (error) {
+      const message =
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
+        error.message ||
+        error.toString();
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
 export const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -112,7 +131,6 @@ export const authSlice = createSlice({
         state.message = action.payload;
         state.user = null;
       })
-      // Removidos: casos de login social (Google/Microsoft)
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
       })
@@ -124,6 +142,20 @@ export const authSlice = createSlice({
         state.isSuccess = true;
       })
       .addCase(forgotPassword.rejected, (state, action) => {
+        state.isLoading = false;
+        state.isError = true;
+        state.message = action.payload;
+      })
+      .addCase(updateProfile.pending, (state) => {
+        state.isLoading = true;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isSuccess = true;
+        state.user = action.payload;
+        state.message = 'Perfil atualizado com sucesso!';
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
         state.message = action.payload;

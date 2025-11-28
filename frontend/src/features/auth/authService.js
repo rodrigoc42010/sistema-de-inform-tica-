@@ -78,11 +78,23 @@ const forgotPassword = async (email) => {
   return response.data;
 };
 
+// Atualizar perfil
+const updateProfile = async (userData, token) => {
+  const response = await axios.put('/api/users/profile', userData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.data) {
+    localStorage.setItem('user', JSON.stringify(response.data));
+  }
+  return response.data;
+};
+
 const authService = {
   register,
   login,
   logout,
   forgotPassword,
+  updateProfile,
 };
 
 export default authService;

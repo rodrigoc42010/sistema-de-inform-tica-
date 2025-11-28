@@ -2,407 +2,293 @@ import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { selectUser } from '../selectors/authSelectors';
 import {
-  Box,
-  Container,
-  Divider,
-  FormControlLabel,
-  Grid,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Paper,
-  Switch,
-  Typography,
-  Button,
-  Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Card,
-  CardContent,
+  Box, Container, Divider, FormControlLabel, Grid, List, ListItem, ListItemIcon, ListItemText,
+  Paper, Switch, Typography, Button, Alert, FormControl, InputLabel, Select, MenuItem,
+  Card, CardContent, Stack, Chip
 } from '@mui/material';
 import {
-  Notifications as NotificationsIcon,
-  Language as LanguageIcon,
-  Palette as PaletteIcon,
-  Visibility as VisibilityIcon,
-  Security as SecurityIcon,
-  Save as SaveIcon,
+  Notifications, Language, Palette, Visibility, Security, Save,
+  Email, Smartphone, Sms, NewReleases, Update, Campaign,
+  DarkMode, TextFields, Contrast, LocationOn, Public
 } from '@mui/icons-material';
 import Sidebar from '../components/Sidebar';
 
 function Settings() {
   const user = useSelector(selectUser);
   const [successMessage, setSuccessMessage] = useState('');
-  
-  // Estados para as configurações
+
   const [settings, setSettings] = useState({
     notifications: {
-      email: true,
-      push: true,
-      sms: false,
-      newTickets: true,
-      ticketUpdates: true,
-      marketing: false,
+      email: true, push: true, sms: false,
+      newTickets: true, ticketUpdates: true, marketing: false,
     },
     appearance: {
-      theme: 'light',
-      fontSize: 'medium',
-      highContrast: false,
+      theme: 'dark', fontSize: 'medium', highContrast: false,
     },
     privacy: {
-      showProfile: true,
-      showOnlineStatus: true,
-      allowLocationAccess: true,
+      showProfile: true, showOnlineStatus: true, allowLocationAccess: true,
     },
     language: 'pt-BR',
   });
 
-  const handleNotificationChange = (event) => {
-    const { name, checked } = event.target;
-    setSettings({
-      ...settings,
-      notifications: {
-        ...settings.notifications,
-        [name]: checked,
-      },
-    });
+  const handleNotificationChange = (e) => {
+    setSettings({ ...settings, notifications: { ...settings.notifications, [e.target.name]: e.target.checked } });
   };
 
-  const handleAppearanceChange = (event) => {
-    const { name, checked, value } = event.target;
-    const newValue = event.target.type === 'checkbox' ? checked : value;
-    
-    setSettings({
-      ...settings,
-      appearance: {
-        ...settings.appearance,
-        [name]: newValue,
-      },
-    });
+  const handleAppearanceChange = (e) => {
+    const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setSettings({ ...settings, appearance: { ...settings.appearance, [e.target.name]: val } });
   };
 
-  const handlePrivacyChange = (event) => {
-    const { name, checked } = event.target;
-    setSettings({
-      ...settings,
-      privacy: {
-        ...settings.privacy,
-        [name]: checked,
-      },
-    });
+  const handlePrivacyChange = (e) => {
+    setSettings({ ...settings, privacy: { ...settings.privacy, [e.target.name]: e.target.checked } });
   };
 
-  const handleLanguageChange = (event) => {
-    setSettings({
-      ...settings,
-      language: event.target.value,
-    });
+  const handleLanguageChange = (e) => {
+    setSettings({ ...settings, language: e.target.value });
   };
 
   const handleSaveSettings = () => {
-    // Aqui você enviaria os dados para a API
-    // Simulando uma atualização bem-sucedida
     setSuccessMessage('Configurações salvas com sucesso!');
-    
-    setTimeout(() => {
-      setSuccessMessage('');
-    }, 3000);
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
+  // Custom Switch Style
+  const gradientSwitch = {
+    '& .MuiSwitch-switchBase.Mui-checked': {
+      color: '#06b6d4',
+      '&:hover': { backgroundColor: 'rgba(6, 182, 212, 0.08)' },
+    },
+    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+      backgroundColor: '#06b6d4',
+    },
   };
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#0f172a' }}>
       <Sidebar />
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: { sm: `calc(100% - 240px)` },
-          ml: { sm: '240px' },
-          mt: '64px',
-        }}
-      >
+      <Box component="main" sx={{ flexGrow: 1, p: 4, ml: { sm: '240px' }, mt: '64px' }}>
         <Container maxWidth="lg">
-          <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h4" component="h1">
+
+          {/* Hero Section */}
+          <Box sx={{ mb: 6, position: 'relative', textAlign: 'center' }}>
+            <Box sx={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 600, height: 400, background: 'radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%)', filter: 'blur(60px)', zIndex: 0 }} />
+            <Box sx={{ position: 'relative', zIndex: 1 }}>
+              <Typography variant="h3" fontWeight="800" sx={{ background: 'linear-gradient(to right, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', mb: 1 }}>
                 Configurações
               </Typography>
+              <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
+                Personalize sua experiência, notificações e preferências de privacidade.
+              </Typography>
+            </Box>
+          </Box>
+
+          {successMessage && (
+            <Alert severity="success" sx={{ mb: 4, bgcolor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)', backdropFilter: 'blur(10px)' }}>
+              {successMessage}
+            </Alert>
+          )}
+
+          <Grid container spacing={3}>
+
+            {/* Notificações */}
+            <Grid item xs={12} md={6}>
+              <Paper className="glass-card-premium" sx={{ p: 0, height: '100%', overflow: 'hidden' }}>
+                <Box sx={{ p: 3, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(6, 182, 212, 0.1)', color: '#06b6d4' }}>
+                    <Notifications />
+                  </Box>
+                  <Typography variant="h6">Notificações</Typography>
+                </Box>
+                <CardContent>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: 1 }}>Canais</Typography>
+                  <List dense disablePadding>
+                    <ListItem>
+                      <ListItemIcon><Email sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Email" secondary="Receber atualizações por email" />
+                      <Switch edge="end" name="email" checked={settings.notifications.email} onChange={handleNotificationChange} sx={gradientSwitch} />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemIcon><Smartphone sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Push" secondary="Notificações no navegador" />
+                      <Switch edge="end" name="push" checked={settings.notifications.push} onChange={handleNotificationChange} sx={gradientSwitch} />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemIcon><Sms sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="SMS" secondary="Mensagens de texto urgentes" />
+                      <Switch edge="end" name="sms" checked={settings.notifications.sms} onChange={handleNotificationChange} sx={gradientSwitch} />
+                    </ListItem>
+                  </List>
+
+                  <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.05)' }} />
+
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: 1 }}>Tipos</Typography>
+                  <List dense disablePadding>
+                    <ListItem>
+                      <ListItemIcon><NewReleases sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Novos Chamados" />
+                      <Switch edge="end" name="newTickets" checked={settings.notifications.newTickets} onChange={handleNotificationChange} sx={gradientSwitch} />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemIcon><Update sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Atualizações" />
+                      <Switch edge="end" name="ticketUpdates" checked={settings.notifications.ticketUpdates} onChange={handleNotificationChange} sx={gradientSwitch} />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemIcon><Campaign sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Marketing" />
+                      <Switch edge="end" name="marketing" checked={settings.notifications.marketing} onChange={handleNotificationChange} sx={gradientSwitch} />
+                    </ListItem>
+                  </List>
+                </CardContent>
+              </Paper>
+            </Grid>
+
+            {/* Aparência & Idioma */}
+            <Grid item xs={12} md={6}>
+              <Stack spacing={3} sx={{ height: '100%' }}>
+                <Paper className="glass-card-premium" sx={{ p: 0 }}>
+                  <Box sx={{ p: 3, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+                      <Palette />
+                    </Box>
+                    <Typography variant="h6">Aparência</Typography>
+                  </Box>
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Tema</InputLabel>
+                          <Select name="theme" value={settings.appearance.theme} label="Tema" onChange={handleAppearanceChange} className="premium-input">
+                            <MenuItem value="light"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Visibility fontSize="small" /> Claro</Box></MenuItem>
+                            <MenuItem value="dark"><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><DarkMode fontSize="small" /> Escuro</Box></MenuItem>
+                            <MenuItem value="system">Sistema</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Fonte</InputLabel>
+                          <Select name="fontSize" value={settings.appearance.fontSize} label="Fonte" onChange={handleAppearanceChange} className="premium-input">
+                            <MenuItem value="small">Pequena</MenuItem>
+                            <MenuItem value="medium">Média</MenuItem>
+                            <MenuItem value="large">Grande</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                    </Grid>
+                    <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Contrast color="action" />
+                        <Typography>Alto Contraste</Typography>
+                      </Box>
+                      <Switch name="highContrast" checked={settings.appearance.highContrast} onChange={handleAppearanceChange} sx={gradientSwitch} />
+                    </Box>
+                  </CardContent>
+                </Paper>
+
+                <Paper className="glass-card-premium" sx={{ p: 0, flexGrow: 1 }}>
+                  <Box sx={{ p: 3, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+                      <Language />
+                    </Box>
+                    <Typography variant="h6">Idioma</Typography>
+                  </Box>
+                  <CardContent>
+                    <FormControl fullWidth>
+                      <InputLabel>Idioma do Sistema</InputLabel>
+                      <Select value={settings.language} label="Idioma do Sistema" onChange={handleLanguageChange} className="premium-input">
+                        <MenuItem value="pt-BR">🇧🇷 Português (Brasil)</MenuItem>
+                        <MenuItem value="en-US">🇺🇸 English (United States)</MenuItem>
+                        <MenuItem value="es">🇪🇸 Español</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </CardContent>
+                </Paper>
+              </Stack>
+            </Grid>
+
+            {/* Privacidade */}
+            <Grid item xs={12} md={6}>
+              <Paper className="glass-card-premium" sx={{ p: 0, height: '100%' }}>
+                <Box sx={{ p: 3, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+                    <Visibility />
+                  </Box>
+                  <Typography variant="h6">Privacidade</Typography>
+                </Box>
+                <CardContent>
+                  <List dense disablePadding>
+                    <ListItem>
+                      <ListItemIcon><Public sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Perfil Público" secondary="Permitir que outros vejam seu perfil" />
+                      <Switch edge="end" name="showProfile" checked={settings.privacy.showProfile} onChange={handlePrivacyChange} sx={gradientSwitch} />
+                    </ListItem>
+                    <Divider component="li" sx={{ my: 1, borderColor: 'rgba(255,255,255,0.05)' }} />
+                    <ListItem>
+                      <ListItemIcon><Visibility sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Status Online" secondary="Mostrar quando você está ativo" />
+                      <Switch edge="end" name="showOnlineStatus" checked={settings.privacy.showOnlineStatus} onChange={handlePrivacyChange} sx={gradientSwitch} />
+                    </ListItem>
+                    <Divider component="li" sx={{ my: 1, borderColor: 'rgba(255,255,255,0.05)' }} />
+                    <ListItem>
+                      <ListItemIcon><LocationOn sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                      <ListItemText primary="Localização" secondary="Usar localização para encontrar serviços" />
+                      <Switch edge="end" name="allowLocationAccess" checked={settings.privacy.allowLocationAccess} onChange={handlePrivacyChange} sx={gradientSwitch} />
+                    </ListItem>
+                  </List>
+                </CardContent>
+              </Paper>
+            </Grid>
+
+            {/* Segurança */}
+            <Grid item xs={12} md={6}>
+              <Paper className="glass-card-premium" sx={{ p: 0, height: '100%' }}>
+                <Box sx={{ p: 3, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+                    <Security />
+                  </Box>
+                  <Typography variant="h6">Segurança</Typography>
+                </Box>
+                <CardContent>
+                  <Stack spacing={2}>
+                    <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <Typography variant="subtitle1" gutterBottom>Verificação em Duas Etapas</Typography>
+                      <Typography variant="body2" color="text.secondary" paragraph>
+                        Proteja sua conta com uma camada extra de segurança.
+                      </Typography>
+                      <Button variant="outlined" color="primary" size="small">Configurar 2FA</Button>
+                    </Box>
+                    <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <Typography variant="subtitle1" gutterBottom>Sessões Ativas</Typography>
+                      <Typography variant="body2" color="text.secondary" paragraph>
+                        Gerencie dispositivos conectados à sua conta.
+                      </Typography>
+                      <Button variant="outlined" color="secondary" size="small">Gerenciar Sessões</Button>
+                    </Box>
+                  </Stack>
+                </CardContent>
+              </Paper>
+            </Grid>
+
+            {/* Save Button */}
+            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
               <Button
                 variant="contained"
-                color="primary"
-                startIcon={<SaveIcon />}
+                size="large"
+                startIcon={<Save />}
                 onClick={handleSaveSettings}
+                sx={{
+                  background: 'linear-gradient(45deg, #06b6d4, #3b82f6)',
+                  px: 4, py: 1.5,
+                  fontSize: '1.1rem'
+                }}
               >
                 Salvar Alterações
               </Button>
-            </Box>
-
-            {successMessage && (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                {successMessage}
-              </Alert>
-            )}
-
-            <Grid container spacing={3}>
-              {/* Notificações */}
-              <Grid item xs={12} md={6}>
-                <Card variant="outlined" sx={{ height: '100%' }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <NotificationsIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Notificações</Typography>
-                    </Box>
-                    <Divider sx={{ mb: 2 }} />
-                    
-                    <Typography variant="subtitle2" gutterBottom>
-                      Canais de Notificação
-                    </Typography>
-                    <List dense>
-                      <ListItem>
-                        <ListItemText primary="Notificações por Email" />
-                        <Switch
-                          edge="end"
-                          name="email"
-                          checked={settings.notifications.email}
-                          onChange={handleNotificationChange}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemText primary="Notificações Push" />
-                        <Switch
-                          edge="end"
-                          name="push"
-                          checked={settings.notifications.push}
-                          onChange={handleNotificationChange}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemText primary="Notificações por SMS" />
-                        <Switch
-                          edge="end"
-                          name="sms"
-                          checked={settings.notifications.sms}
-                          onChange={handleNotificationChange}
-                        />
-                      </ListItem>
-                    </List>
-                    
-                    <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-                      Tipos de Notificação
-                    </Typography>
-                    <List dense>
-                      <ListItem>
-                        <ListItemText primary="Novos Chamados" />
-                        <Switch
-                          edge="end"
-                          name="newTickets"
-                          checked={settings.notifications.newTickets}
-                          onChange={handleNotificationChange}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemText primary="Atualizações de Chamados" />
-                        <Switch
-                          edge="end"
-                          name="ticketUpdates"
-                          checked={settings.notifications.ticketUpdates}
-                          onChange={handleNotificationChange}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemText primary="Comunicações de Marketing" />
-                        <Switch
-                          edge="end"
-                          name="marketing"
-                          checked={settings.notifications.marketing}
-                          onChange={handleNotificationChange}
-                        />
-                      </ListItem>
-                    </List>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Aparência */}
-              <Grid item xs={12} md={6}>
-                <Card variant="outlined" sx={{ height: '100%' }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <PaletteIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Aparência</Typography>
-                    </Box>
-                    <Divider sx={{ mb: 2 }} />
-                    
-                    <FormControl fullWidth margin="normal">
-                      <InputLabel id="theme-select-label">Tema</InputLabel>
-                      <Select
-                        labelId="theme-select-label"
-                        id="theme-select"
-                        name="theme"
-                        value={settings.appearance.theme}
-                        label="Tema"
-                        onChange={handleAppearanceChange}
-                      >
-                        <MenuItem value="light">Claro</MenuItem>
-                        <MenuItem value="dark">Escuro</MenuItem>
-                        <MenuItem value="system">Sistema</MenuItem>
-                      </Select>
-                    </FormControl>
-                    
-                    <FormControl fullWidth margin="normal">
-                      <InputLabel id="font-size-select-label">Tamanho da Fonte</InputLabel>
-                      <Select
-                        labelId="font-size-select-label"
-                        id="font-size-select"
-                        name="fontSize"
-                        value={settings.appearance.fontSize}
-                        label="Tamanho da Fonte"
-                        onChange={handleAppearanceChange}
-                      >
-                        <MenuItem value="small">Pequeno</MenuItem>
-                        <MenuItem value="medium">Médio</MenuItem>
-                        <MenuItem value="large">Grande</MenuItem>
-                      </Select>
-                    </FormControl>
-                    
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          name="highContrast"
-                          checked={settings.appearance.highContrast}
-                          onChange={handleAppearanceChange}
-                        />
-                      }
-                      label="Alto Contraste"
-                      sx={{ mt: 1 }}
-                    />
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Idioma */}
-              <Grid item xs={12} md={6}>
-                <Card variant="outlined">
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <LanguageIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Idioma</Typography>
-                    </Box>
-                    <Divider sx={{ mb: 2 }} />
-                    
-                    <FormControl fullWidth margin="normal">
-                      <InputLabel id="language-select-label">Idioma do Sistema</InputLabel>
-                      <Select
-                        labelId="language-select-label"
-                        id="language-select"
-                        value={settings.language}
-                        label="Idioma do Sistema"
-                        onChange={handleLanguageChange}
-                      >
-                        <MenuItem value="pt-BR">Português (Brasil)</MenuItem>
-                        <MenuItem value="en-US">English (United States)</MenuItem>
-                        <MenuItem value="es">Español</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Privacidade */}
-              <Grid item xs={12} md={6}>
-                <Card variant="outlined">
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <VisibilityIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Privacidade</Typography>
-                    </Box>
-                    <Divider sx={{ mb: 2 }} />
-                    
-                    <List dense>
-                      <ListItem>
-                        <ListItemText 
-                          primary="Mostrar Perfil para Outros Usuários" 
-                          secondary="Permite que outros usuários vejam seu perfil"
-                        />
-                        <Switch
-                          edge="end"
-                          name="showProfile"
-                          checked={settings.privacy.showProfile}
-                          onChange={handlePrivacyChange}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemText 
-                          primary="Mostrar Status Online" 
-                          secondary="Permite que outros usuários vejam quando você está online"
-                        />
-                        <Switch
-                          edge="end"
-                          name="showOnlineStatus"
-                          checked={settings.privacy.showOnlineStatus}
-                          onChange={handlePrivacyChange}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemText 
-                          primary="Permitir Acesso à Localização" 
-                          secondary="Permite que o sistema use sua localização para encontrar técnicos próximos"
-                        />
-                        <Switch
-                          edge="end"
-                          name="allowLocationAccess"
-                          checked={settings.privacy.allowLocationAccess}
-                          onChange={handlePrivacyChange}
-                        />
-                      </ListItem>
-                    </List>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Segurança da Conta */}
-              <Grid item xs={12}>
-                <Card variant="outlined">
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <SecurityIcon color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Segurança da Conta</Typography>
-                    </Box>
-                    <Divider sx={{ mb: 2 }} />
-                    
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Verificação em Duas Etapas
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary" paragraph>
-                          Adicione uma camada extra de segurança à sua conta ativando a verificação em duas etapas.
-                        </Typography>
-                        <Button variant="outlined" color="primary">
-                          Configurar Verificação em Duas Etapas
-                        </Button>
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Sessões Ativas
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary" paragraph>
-                          Você tem 2 dispositivos conectados à sua conta. Você pode encerrar todas as sessões exceto a atual.
-                        </Typography>
-                        <Button variant="outlined" color="secondary">
-                          Gerenciar Sessões
-                        </Button>
-                      </Grid>
-                    </Grid>
-                  </CardContent>
-                </Card>
-              </Grid>
             </Grid>
-          </Paper>
+
+          </Grid>
         </Container>
       </Box>
     </Box>
