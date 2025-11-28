@@ -25,6 +25,18 @@ const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss');
 const hpp = require('hpp');
 
+// Performance e Logging (com fallback se não instalados)
+let compression, morgan, slowDown, logger;
+try {
+  compression = require('compression');
+  morgan = require('morgan');
+  slowDown = require('express-slow-down');
+  logger = require('./config/logger');
+} catch (e) {
+  // Fallback para console se pacotes não estiverem instalados
+  logger = console;
+}
+
 // Carregar variáveis de ambiente
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -32,7 +44,18 @@ const missingVars = [];
 if (!process.env.JWT_SECRET) missingVars.push('JWT_SECRET');
 if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) missingVars.push('DATABASE_URL/POSTGRES_URL');
 if (missingVars.length) {
-  console.warn(`Variáveis de ambiente ausentes: ${missingVars.join(', ')}`);
+  logger.warn(`Variáveis de ambiente ausentes: ${missingVars.join(', ')}`);
+}
+
+// Validar JWT_SECRET em produção
+if (process.env.NODE_ENV === 'production') {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret || jwtSecret.length < 32 || jwtSecret.includes('troque')) {
+    logger.error('ERRO CRÍTICO: JWT_SECRET inválido ou inseguro em produção!');
+    logger.error('JWT_SECRET deve ter pelo menos 32 caracteres e não conter valores padrão.');
+    process.exit(1);
+  }
+  logger.info('JWT_SECRET validado com sucesso');
 }
 
 // Conectar ao banco de dados (mas continuar mesmo se falhar)
@@ -124,21 +147,31 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS: liberado em dev; restrito em produção por ALLOWED_ORIGINS (lista separada por vírgula)
+// CORS: whitelist mesmo em desenvolvimento para maior segurança
+const devOrigins = ['http://localhost:3000', 'http://localhost:5000', 'http://localhost:5001'];
 const allowedOriginsEnv = process.env.ALLOWED_ORIGINS || '';
-const allowedOrigins = allowedOriginsEnv
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+const prodOrigins = allowedOriginsEnv.split(',').map((o) => o.trim()).filter(Boolean);
+const allowedOrigins = process.env.NODE_ENV === 'production' ? prodOrigins : devOrigins;
+
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // ex: curl/mobile
-      if (process.env.NODE_ENV !== 'production') return callback(null, true);
-      if (allowedOrigins.length === 0) return callback(null, true);
-      return allowedOrigins.includes(origin)
-        ? callback(null, true)
-        : callback(new Error('Origem não permitida pela política de CORS'));
+      // Permitir requisições sem origin (ex: curl, mobile apps)
+      if (!origin) return callback(null, true);
+
+      // Em produção sem ALLOWED_ORIGINS configurado, bloquear tudo
+      if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+        logger.warn(`CORS bloqueado: nenhuma origem configurada em produção`);
+        return callback(new Error('CORS não configurado'));
+      }
+
+      // Verificar whitelist
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      logger.warn(`CORS bloqueado para origem: ${origin}`);
+      return callback(new Error('Origem não permitida pela política de CORS'));
     },
     credentials: true,
   })
@@ -148,12 +181,30 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
+// Compressão gzip (se disponível)
+if (compression) {
+  app.use(compression());
+  logger.info('Compressão gzip ativada');
+}
+
+// HTTP request logger (se disponível)
+if (morgan && logger.stream) {
+  const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
+  app.use(morgan(morganFormat, { stream: logger.stream }));
+  logger.info('Morgan HTTP logger ativado');
+}
+
 // Auditoria simples de acesso (IP mascarado)
 app.use((req, res, next) => {
   const realIP = getRequestIP(req);
   const maskedIP = maskIP(realIP);
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] Acesso de IP: ${maskedIP} - ${req.method} ${req.path}`.cyan);
+  // Usar logger se disponível, senão console
+  if (logger.http) {
+    logger.http(`Acesso de IP: ${maskedIP} - ${req.method} ${req.path}`);
+  } else {
+    console.log(`[${timestamp}] Acesso de IP: ${maskedIP} - ${req.method} ${req.path}`.cyan);
+  }
   next();
 });
 
@@ -168,8 +219,16 @@ const logsDir = path.join(__dirname, '../logs');
 try {
   fs.mkdirSync(logsDir, { recursive: true });
 } catch (e) {
-  console.error('Não foi possível criar pasta de logs:', e.message);
+  logger.error('Não foi possível criar pasta de logs:', e.message);
 }
+
+// Função para mascarar email em logs
+const maskEmail = (email) => {
+  if (!email || typeof email !== 'string') return 'N/A';
+  const [user, domain] = email.split('@');
+  if (!user || !domain) return 'N/A';
+  return `${user.slice(0, 2)}***@${domain}`;
+};
 
 // Auditoria de tentativas de autenticação (formato unificado)
 app.use((req, res, next) => {
@@ -191,7 +250,7 @@ app.use((req, res, next) => {
         event: isRegister
           ? (res.statusCode >= 200 && res.statusCode < 400 ? 'REGISTER' : 'REGISTER_FAILED')
           : (res.statusCode >= 200 && res.statusCode < 400 ? 'LOGIN' : 'LOGIN_FAILED'),
-        user: { email: email || 'N/A' },
+        user: { email: maskEmail(email) }, // Email mascarado para segurança
         connection: {
           ip: maskedIP,
           userAgent: ua,
@@ -203,7 +262,7 @@ app.use((req, res, next) => {
       };
       fs.appendFile(path.join(logsDir, 'login-audit.log'), JSON.stringify(entry) + '\n', () => { });
     } catch (err) {
-      console.error('Falha ao gravar log de login:', err?.message || err);
+      logger.error('Falha ao gravar log de login:', err?.message || err);
     }
   });
 
@@ -219,6 +278,18 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
+// Slow down para login (desacelera antes de bloquear)
+if (slowDown) {
+  const loginSpeedLimiter = slowDown({
+    windowMs: 15 * 60 * 1000,
+    delayAfter: 3,
+    delayMs: 500
+  });
+  app.use('/api/users/login', loginSpeedLimiter);
+  app.use('/api/users/technician-login', loginSpeedLimiter);
+  logger.info('Slow-down ativado para rotas de login');
+}
+
 // Rate limiters específicos para autenticação (mitigação de brute force)
 const authLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 min
@@ -230,6 +301,25 @@ const authLimiter = rateLimit({
 app.use('/api/users/login', authLimiter);
 app.use('/api/users/technician-login', authLimiter);
 app.use('/api/users/auth/', rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }));
+
+// Rate limiters para rotas sensíveis
+const ticketLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: 'Muitas requisições de tickets. Tente novamente mais tarde.'
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Muitos uploads. Tente novamente mais tarde.'
+});
+
+app.use('/api/tickets', ticketLimiter);
+app.use('/api/uploads', uploadLimiter);
+app.use('/api/payments', ticketLimiter);
+
+logger.info('Rate limiting configurado para todas as rotas sensíveis');
 
 // Rotas da API
 app.use('/api/users', require('./routes/userRoutes'));

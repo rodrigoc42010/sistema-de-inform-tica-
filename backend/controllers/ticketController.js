@@ -120,14 +120,30 @@ const updateTicket = asyncHandler(async (req, res) => {
     res.status(403);
     throw new Error('Acesso negado para atualizar este ticket');
   }
-  const allowedUpdates = ['status', 'finalReport', 'serviceItems', 'attachments', 'paymentStatus'];
+
+  // Definir campos permitidos por role (previne escalação de privilégios)
+  const technicianAllowedFields = ['status', 'finalReport', 'serviceItems', 'attachments'];
+  const clientAllowedFields = ['paymentStatus'];
+
+  const allowedUpdates = req.user.role === 'technician'
+    ? technicianAllowedFields
+    : clientAllowedFields;
+
   const updates = Object.keys(req.body).filter((k) => allowedUpdates.includes(k));
+
+  // Validação adicional: apenas cliente pode atualizar paymentStatus
+  if (req.body.paymentStatus && !isClientOwner) {
+    res.status(403);
+    throw new Error('Apenas o cliente pode atualizar o status de pagamento');
+  }
+
   let status = ticket.status;
   let completionDate = ticket.completion_date;
   let serviceItems = ticket.service_items || [];
   let attachments = ticket.attachments || [];
   let finalReport = ticket.final_report || null;
   let paymentStatus = ticket.payment_status || null;
+
   updates.forEach((key) => {
     if (key === 'status') {
       let next = req.body.status;
@@ -150,6 +166,7 @@ const updateTicket = asyncHandler(async (req, res) => {
     [status, finalReport, JSON.stringify(serviceItems), JSON.stringify(attachments), paymentStatus, completionDate, totalPrice, req.params.id]
   );
   const rsUpdated = await pool.query('SELECT * FROM tickets WHERE id=$1', [req.params.id]);
+  console.log(`[TICKETS] Ticket ${req.params.id} atualizado por ${req.user.role} ${req.user.id}`);
   return res.status(200).json(rsUpdated.rows[0]);
 });
 

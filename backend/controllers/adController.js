@@ -222,23 +222,42 @@ const updateAd = asyncHandler(async (req, res) => {
     throw new Error('Você não tem permissão para editar este anúncio');
   }
 
-  const allowedFields = ['title', 'text', 'linkUrl', 'mediaUrl', 'audience', 'startDate', 'endDate', 'active'];
-  allowedFields.forEach((field) => {
-    if (field in req.body) {
-      ad[field] = req.body[field];
+  // Whitelist estrita de colunas permitidas (previne SQL injection)
+  const ALLOWED_UPDATES = {
+    title: 'title',
+    text: 'text',
+    linkUrl: 'link_url',
+    mediaUrl: 'media_url',
+    audience: 'audience',
+    startDate: 'start_date',
+    endDate: 'end_date',
+    active: 'active'
+  };
+
+  const sets = [];
+  const values = [];
+  let paramIndex = 1;
+
+  // Apenas processar campos permitidos
+  Object.keys(req.body).forEach((key) => {
+    if (ALLOWED_UPDATES[key]) {
+      sets.push(`${ALLOWED_UPDATES[key]}=$${paramIndex}`);
+      values.push(req.body[key]);
+      paramIndex++;
     }
   });
 
-  const fields = {};
-  allowedFields.forEach((f) => { if (f in req.body) fields[f] = req.body[f]; });
-  const colMap = { title: 'title', text: 'text', linkUrl: 'link_url', mediaUrl: 'media_url', audience: 'audience', startDate: 'start_date', endDate: 'end_date', active: 'active' };
-  const sets = [];
-  const values = [];
-  let idx = 1;
-  Object.keys(fields).forEach((k) => { sets.push(`${colMap[k]}=$${idx++}`); values.push(fields[k]); });
-  values.push(id);
-  if (sets.length) await pool.query(`UPDATE ads SET ${sets.join(', ')} WHERE id=$${idx}`, values);
+  if (sets.length === 0) {
+    return res.status(400).json({ message: 'Nenhum campo válido para atualizar' });
+  }
+
+  values.push(id); // ID sempre por último
+  const updateQuery = `UPDATE ads SET ${sets.join(', ')} WHERE id=$${paramIndex}`;
+
+  await pool.query(updateQuery, values);
   const rsUpdated = await pool.query('SELECT * FROM ads WHERE id=$1', [id]);
+
+  console.log(`[ADS] Anúncio atualizado: ${id} por usuário ${req.user.id}`);
   return res.status(200).json(rsUpdated.rows[0]);
 });
 

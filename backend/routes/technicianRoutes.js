@@ -42,7 +42,7 @@ router.post('/:technicianId/reviews', protect, clientOnly, async (req, res, next
 router.get('/top', async (req, res, next) => {
   try {
     const { city, state } = req.query;
-    const limit = Number(req.query.limit || 5) || 5;
+    const limit = Math.min(Number(req.query.limit) || 5, 50); // Máximo 50
 
     // Fallback: modo demonstração ou banco de dados indisponível
     const isDemo = process.env.DEMO_MODE === 'true';
@@ -50,15 +50,43 @@ router.get('/top', async (req, res, next) => {
       return res.json([]);
     }
     const pool = getPool();
-    const conds = ['role=$1'];
+
+    // Construir query de forma segura com parâmetros
+    const conditions = ['role=$1'];
     const params = ['technician'];
-    let idx = 2;
-    if (city) { conds.push(`(address->>'city')=$${idx++}`); params.push(city); }
-    if (state) { conds.push(`(address->>'state')=$${idx++}`); params.push(state); }
-    const rsUsers = await pool.query(`SELECT id,name,address FROM users WHERE ${conds.join(' AND ')} LIMIT 500`, params);
+    let paramIndex = 2;
+
+    // Validar e adicionar filtro de cidade
+    if (city && typeof city === 'string' && city.trim()) {
+      conditions.push(`(address->>'city')=$${paramIndex}`);
+      params.push(city.trim());
+      paramIndex++;
+    }
+
+    // Validar e adicionar filtro de estado
+    if (state && typeof state === 'string' && state.trim()) {
+      conditions.push(`(address->>'state')=$${paramIndex}`);
+      params.push(state.trim());
+      paramIndex++;
+    }
+
+    // Query segura com parâmetros
+    const userQuery = `
+      SELECT id, name, address 
+      FROM users 
+      WHERE ${conditions.join(' AND ')} 
+      LIMIT 500
+    `;
+
+    const rsUsers = await pool.query(userQuery, params);
     const userIds = rsUsers.rows.map(r => r.id);
     if (userIds.length === 0) return res.json([]);
-    const rsTech = await pool.query('SELECT * FROM technicians WHERE user_id = ANY($1) ORDER BY rating DESC, total_reviews DESC LIMIT $2', [userIds, limit]);
+
+    const rsTech = await pool.query(
+      'SELECT * FROM technicians WHERE user_id = ANY($1) ORDER BY rating DESC, total_reviews DESC LIMIT $2',
+      [userIds, limit]
+    );
+
     const result = rsTech.rows.map((t) => {
       const u = rsUsers.rows.find((x) => String(x.id) === String(t.user_id));
       return {
@@ -74,6 +102,7 @@ router.get('/top', async (req, res, next) => {
     });
     return res.json(result);
   } catch (err) {
+    console.error('[TECHNICIANS] Erro ao buscar top técnicos:', err.message);
     // Em falha inesperada, retornar lista vazia para evitar 500
     try { return res.json([]); } catch (e) { return next(err); }
   }
