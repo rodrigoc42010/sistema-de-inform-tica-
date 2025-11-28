@@ -206,6 +206,16 @@ async function initPostgres() {
         );
       `);
 
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS analytics_events (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          event TEXT,
+          metadata JSONB,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+
       await client.query('ALTER TABLE public.users ENABLE ROW LEVEL SECURITY');
       await client.query('ALTER TABLE public.technicians ENABLE ROW LEVEL SECURITY');
       await client.query('ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY');
@@ -216,16 +226,6 @@ async function initPostgres() {
       await client.query('ALTER TABLE public.payment_logs ENABLE ROW LEVEL SECURITY');
       await client.query('ALTER TABLE public.blacklisted_tokens ENABLE ROW LEVEL SECURITY');
       await client.query('ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY');
-
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS analytics_events (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-          event TEXT,
-          metadata JSONB,
-          created_at TIMESTAMP DEFAULT NOW()
-        );
-      `);
 
       await client.query('COMMIT');
 
