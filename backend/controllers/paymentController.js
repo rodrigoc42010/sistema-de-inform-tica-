@@ -1,6 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const { getPool } = require('../db/pgClient');
-const sendEmail = require('../utils/sendEmail');
+const { sendEmail } = require('../utils/emailService');
 
 const normalizeStatus = (s, role) => {
   const map = {

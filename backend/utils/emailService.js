@@ -37,9 +37,9 @@ const createTransporter = async () => {
 const sendVerificationEmail = async (email, name, verificationToken) => {
   try {
     const transporter = await createTransporter();
-    
+
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email/${verificationToken}`;
-    
+
     const mailOptions = {
       from: process.env.EMAIL_FROM || 'noreply@sistemainfo.com',
       to: email,
@@ -82,16 +82,16 @@ const sendVerificationEmail = async (email, name, verificationToken) => {
         </div>
       `,
     };
-    
+
     const info = await transporter.sendMail(mailOptions);
-    
+
     console.log('E-mail de verificação enviado:', info.messageId);
-    
+
     // Em desenvolvimento, mostrar o link de preview do Ethereal
     if (process.env.NODE_ENV !== 'production') {
       console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
     }
-    
+
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Erro ao enviar e-mail de verificação:', error);
@@ -104,7 +104,26 @@ const resendVerificationEmail = async (email, name, verificationToken) => {
   return await sendVerificationEmail(email, name, verificationToken);
 };
 
+
+// Função genérica para enviar e-mail
+const sendEmail = async (options) => {
+  const transporter = await createTransporter();
+
+  const message = {
+    from: `${process.env.FROM_NAME || 'TechAssist'} <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+    to: options.email,
+    subject: options.subject,
+    text: options.message,
+    html: options.html || options.message.replace(/\n/g, '<br>'),
+  };
+
+  const info = await transporter.sendMail(message);
+  console.log('Message sent: %s', info.messageId);
+  return info;
+};
+
 module.exports = {
   sendVerificationEmail,
   resendVerificationEmail,
+  sendEmail,
 };
