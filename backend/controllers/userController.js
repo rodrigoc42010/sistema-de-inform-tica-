@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const GeocodingService = require('../services/geocodingService');
 const { sendVerificationEmail } = require('../utils/emailService');
 const { logLogin, logFailedLogin, logLogout } = require('../middleware/auditLogger');
 const { getPool } = require('../db/pgClient');
@@ -596,7 +597,7 @@ const getMe = asyncHandler(async (req, res) => {
   const rsTechCheck = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
   if (rsTechCheck.rowCount && effectiveRole !== 'technician') {
     effectiveRole = 'technician';
-    try { await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', user.id]); } catch {}
+    try { await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', user.id]); } catch { }
   }
   if (effectiveRole === 'technician') {
     const rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
@@ -682,6 +683,31 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         'UPDATE users SET name=$1,email=$2,phone=$3,cpf_cnpj=$4,address=$5,bank_info=$6,profile_image=$7, password=COALESCE($8,password), password_changed_at=COALESCE($9,password_changed_at) WHERE id=$10',
         [name, email, phone, cpf_cnpj, address, bank_info, profile_image, passwordSql, passwordChangedAt, user.id]
       );
+
+      // Se for técnico e mudou o endereço, atualizar coordenadas
+      if (user.role === 'technician' && req.body.address) {
+        try {
+          const coords = await GeocodingService.getCoordinates(req.body.address);
+          if (coords) {
+            await pool.query(
+              'UPDATE technicians SET latitude=$1, longitude=$2, address_street=$3, address_number=$4, address_city=$5, address_state=$6, address_zipcode=$7 WHERE user_id=$8',
+              [
+                coords.latitude,
+                coords.longitude,
+                req.body.address.street,
+                req.body.address.number,
+                req.body.address.city,
+                req.body.address.state,
+                req.body.address.zipcode,
+                user.id
+              ]
+            );
+            console.log(`Coordenadas atualizadas para técnico ${user.id}: ${coords.latitude}, ${coords.longitude}`);
+          }
+        } catch (geoError) {
+          console.error('Erro ao atualizar coordenadas no perfil:', geoError.message);
+        }
+      }
       const rsUpdated = await pool.query('SELECT * FROM users WHERE id=$1', [user.id]);
       const updatedUser = rsUpdated.rows[0];
       return res.status(200).json({
