@@ -30,10 +30,11 @@ import {
   Snackbar,
   Alert,
   Menu,
-  
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import {
-  Add as AddIcon,
   AttachMoney as AttachMoneyIcon,
   CreditCard as CreditCardIcon,
   Download as DownloadIcon,
@@ -42,7 +43,11 @@ import {
   Receipt as ReceiptIcon,
   AccountBalance as AccountBalanceIcon,
   MoreVert as MoreVertIcon,
+  Email as EmailIcon,
+  QrCode as QrCodeIcon,
+  ContentCopy as ContentCopyIcon,
 } from '@mui/icons-material';
+import { QRCodeSVG } from 'qrcode.react';
 import Sidebar from '../components/Sidebar';
 import { selectUser } from '../selectors/authSelectors';
 import { setUser } from '../features/auth/authSlice';
@@ -63,6 +68,12 @@ function Payments() {
   const [filterMethod, setFilterMethod] = useState('all');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
+  // Charge Dialog State
+  const [openChargeDialog, setOpenChargeDialog] = useState(false);
+  const [chargeLoading, setChargeLoading] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('pix');
+  const [pixKey, setPixKey] = useState('');
+
   // Estados para compra de remoção de anúncios
   const [monthsAdFree, setMonthsAdFree] = useState(1);
   const [purchasingAdFree, setPurchasingAdFree] = useState(false);
@@ -75,7 +86,7 @@ function Payments() {
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
-  
+
   // Dados carregados da API
   const [apiPayments, setApiPayments] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
@@ -183,15 +194,22 @@ function Payments() {
       }
     };
     fetchPayments();
-  }, [user?.token]);
+  }, [user?.token, filters]);
+
+  // Load PIX key from user profile
+  useEffect(() => {
+    if (user?.pixKey) {
+      setPixKey(user.pixKey);
+    }
+  }, [user]);
 
   const filteredPayments = useMemo(() => {
     let rows = paymentsSource;
 
     if (activeTab === 1) {
-      rows = rows.filter((p) => ['pending','pendente'].includes(p.status));
+      rows = rows.filter((p) => ['pending', 'pendente'].includes(p.status));
     } else if (activeTab === 2) {
-      rows = rows.filter((p) => (user?.role === 'client' ? ['paid','pago'].includes(p.status) : ['completed','recebido'].includes(p.status)));
+      rows = rows.filter((p) => (user?.role === 'client' ? ['paid', 'pago'].includes(p.status) : ['completed', 'recebido'].includes(p.status)));
     }
 
     if (filterQuery || filters.q) {
@@ -249,7 +267,7 @@ function Payments() {
       if (!user?.token || !actionPayment?.id) return;
       await axios.put(`/api/payments/${actionPayment.id}/status`, { status: newStatus }, { headers: { Authorization: `Bearer ${user.token}` } });
       setApiPayments((prev) => prev.map((it) => it.id === actionPayment.id ? { ...it, status: newStatus } : it));
-    } catch {}
+    } catch { }
     finally { closeActions(); }
   };
 
@@ -258,9 +276,48 @@ function Payments() {
   };
 
   const handleMakePayment = () => {
-    // Lógica para processar o pagamento
     handleClosePaymentDialog();
-    // Atualizar o estado ou fazer uma chamada API
+  };
+
+  const handleOpenChargeDialog = (payment) => {
+    setSelectedPayment(payment);
+    setSelectedPaymentMethod('pix');
+    setOpenChargeDialog(true);
+  };
+
+  const handleCloseChargeDialog = () => {
+    setOpenChargeDialog(false);
+    setChargeLoading(false);
+  };
+
+  const handleSendReminder = async () => {
+    try {
+      setChargeLoading(true);
+      await axios.post(`/api/payments/${selectedPayment.id}/remind`, {}, { headers: { Authorization: `Bearer ${user.token}` } });
+      setSnackbar({ open: true, message: 'Lembrete enviado com sucesso!', severity: 'success' });
+      handleCloseChargeDialog();
+    } catch (error) {
+      setSnackbar({ open: true, message: 'Erro ao enviar lembrete.', severity: 'error' });
+    } finally {
+      setChargeLoading(false);
+    }
+  };
+
+  const handleCopyPixKey = () => {
+    navigator.clipboard.writeText(pixKey);
+    setSnackbar({ open: true, message: 'Chave PIX copiada!', severity: 'success' });
+  };
+
+  const handleSendReceiptEmail = async () => {
+    try {
+      setChargeLoading(true);
+      await axios.post(`/api/payments/${selectedPayment.id}/receipt`, {}, { headers: { Authorization: `Bearer ${user.token}` } });
+      setSnackbar({ open: true, message: 'Recibo enviado por email!', severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: 'Erro ao enviar recibo.', severity: 'error' });
+    } finally {
+      setChargeLoading(false);
+    }
   };
 
   const handleOpenFilterDialog = () => setOpenFilterDialog(true);
@@ -275,6 +332,7 @@ function Payments() {
     setFilterStatus('all');
     setFilterFrom('');
     setFilterTo('');
+    setFilters({ q: '', method: 'all', status: 'all', from: '', to: '' });
     setOpenFilterDialog(false);
   };
 
@@ -294,11 +352,14 @@ function Payments() {
 
     switch (status) {
       case 'pending':
+      case 'pendente':
         color = 'warning';
         label = 'Pendente';
         break;
       case 'paid':
+      case 'pago':
       case 'completed':
+      case 'recebido':
         color = 'success';
         label = 'Pago';
         break;
@@ -351,6 +412,15 @@ function Payments() {
     }
   };
 
+  // Generate PIX payload for QR Code
+  const generatePixPayload = () => {
+    if (!pixKey || !selectedPayment) return '';
+
+    // Simplified PIX payload (in production, use proper EMV format)
+    const payload = `PIX|${pixKey}|${selectedPayment.amount.toFixed(2)}|${selectedPayment.description}`;
+    return payload;
+  };
+
   return (
     <Box sx={{ display: 'flex' }}>
       <Sidebar />
@@ -383,7 +453,7 @@ function Payments() {
                   variant="outlined"
                   startIcon={<DownloadIcon />}
                   sx={{ mr: 1 }}
-                  onClick={()=>setOpenReportDialog(true)}
+                  onClick={() => setOpenReportDialog(true)}
                 >
                   Relatório
                 </Button>
@@ -475,8 +545,8 @@ function Payments() {
                       <AttachMoneyIcon color="success" sx={{ mr: 1, fontSize: 40 }} />
                       <Typography variant="h4">
                         R$ {user?.role === 'client'
-                          ? paymentsSource.filter((p) => ['paid','pago'].includes(p.status)).reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)
-                          : paymentsSource.filter((p) => ['completed','recebido'].includes(p.status)).reduce((sum, p) => sum + (p.netAmount || p.amount || 0), 0).toFixed(2)}
+                          ? paymentsSource.filter((p) => ['paid', 'pago'].includes(p.status)).reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)
+                          : paymentsSource.filter((p) => ['completed', 'recebido'].includes(p.status)).reduce((sum, p) => sum + (p.netAmount || p.amount || 0), 0).toFixed(2)}
                       </Typography>
                     </Box>
                   </CardContent>
@@ -492,8 +562,8 @@ function Payments() {
                       <AccountBalanceIcon color="warning" sx={{ mr: 1, fontSize: 40 }} />
                       <Typography variant="h4">
                         R$ {user?.role === 'client'
-                          ? paymentsSource.filter((p) => ['pending','pendente'].includes(p.status)).reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)
-                          : paymentsSource.filter((p) => ['pending','pendente'].includes(p.status)).reduce((sum, p) => sum + (p.netAmount || p.amount || 0), 0).toFixed(2)}
+                          ? paymentsSource.filter((p) => ['pending', 'pendente'].includes(p.status)).reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)
+                          : paymentsSource.filter((p) => ['pending', 'pendente'].includes(p.status)).reduce((sum, p) => sum + (p.netAmount || p.amount || 0), 0).toFixed(2)}
                       </Typography>
                     </Box>
                   </CardContent>
@@ -567,23 +637,35 @@ function Payments() {
                             <CreditCardIcon />
                           </IconButton>
                         )}
-                        {((user?.role === 'client' && payment.status === 'paid') ||
-                          (user?.role === 'technician' && payment.status === 'completed')) && (
-                          <IconButton
+                        {user?.role === 'technician' && payment.status === 'pending' && (
+                          <Button
+                            variant="contained"
                             color="primary"
-                            onClick={() => handleOpenReceiptDialog(payment)}
                             size="small"
+                            startIcon={<AttachMoneyIcon />}
+                            onClick={() => handleOpenChargeDialog(payment)}
+                            sx={{ mr: 1 }}
                           >
-                            <VisibilityIcon />
-                          </IconButton>
+                            Cobrar
+                          </Button>
                         )}
                         {((user?.role === 'client' && payment.status === 'paid') ||
                           (user?.role === 'technician' && payment.status === 'completed')) && (
-                          <IconButton color="primary" size="small">
-                            <DownloadIcon />
-                          </IconButton>
-                        )}
-                        <IconButton color="primary" size="small" onClick={(e)=>openActions(e, payment)}>
+                            <IconButton
+                              color="primary"
+                              onClick={() => handleOpenReceiptDialog(payment)}
+                              size="small"
+                            >
+                              <VisibilityIcon />
+                            </IconButton>
+                          )}
+                        {((user?.role === 'client' && payment.status === 'paid') ||
+                          (user?.role === 'technician' && payment.status === 'completed')) && (
+                            <IconButton color="primary" size="small">
+                              <DownloadIcon />
+                            </IconButton>
+                          )}
+                        <IconButton color="primary" size="small" onClick={(e) => openActions(e, payment)}>
                           <MoreVertIcon />
                         </IconButton>
                       </TableCell>
@@ -598,9 +680,9 @@ function Payments() {
 
       {/* Menu de ações */}
       <Menu anchorEl={anchorEl} open={actionsOpen} onClose={closeActions}>
-        <MenuItem onClick={()=>applyStatus(user?.role==='technician' ? 'recebido' : 'pago')}>{user?.role==='technician' ? 'Marcar como Recebido' : 'Marcar como Pago'}</MenuItem>
-        <MenuItem onClick={()=>applyStatus('pendente')}>Marcar como Pendente</MenuItem>
-        <MenuItem onClick={()=>applyStatus('cancelado')}>Marcar como Cancelado</MenuItem>
+        <MenuItem onClick={() => applyStatus(user?.role === 'technician' ? 'recebido' : 'pago')}>{user?.role === 'technician' ? 'Marcar como Recebido' : 'Marcar como Pago'}</MenuItem>
+        <MenuItem onClick={() => applyStatus('pendente')}>Marcar como Pendente</MenuItem>
+        <MenuItem onClick={() => applyStatus('cancelado')}>Marcar como Cancelado</MenuItem>
       </Menu>
 
       {/* Dialog para realizar pagamento */}
@@ -623,7 +705,7 @@ function Payments() {
               <MenuItem value="pix">PIX</MenuItem>
               <MenuItem value="bank_transfer">Transferência Bancária</MenuItem>
             </TextField>
-            
+
             <TextField
               fullWidth
               label="Valor"
@@ -645,67 +727,174 @@ function Payments() {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog para visualizar recibo */}
-      <Dialog 
-        open={openReceiptDialog} 
+      {/* Dialog de Cobrança com PIX */}
+      <Dialog open={openChargeDialog} onClose={handleCloseChargeDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Cobrar Cliente</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            <strong>{selectedPayment?.description}</strong>
+            <br />
+            Valor: R$ {selectedPayment?.amount?.toFixed(2)}
+          </DialogContentText>
+
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Escolha o método de pagamento:</Typography>
+          <RadioGroup value={selectedPaymentMethod} onChange={(e) => setSelectedPaymentMethod(e.target.value)}>
+            <FormControlLabel value="pix" control={<Radio />} label="PIX (Recomendado)" />
+            <FormControlLabel value="card" control={<Radio />} label="Cartão de Crédito/Débito" />
+            <FormControlLabel value="transfer" control={<Radio />} label="Transferência Bancária" />
+          </RadioGroup>
+
+          {selectedPaymentMethod === 'pix' && (
+            <Box sx={{ mt: 3, p: 2, border: '1px solid #eee', borderRadius: 2, textAlign: 'center' }}>
+              {pixKey ? (
+                <>
+                  <Typography variant="h6" gutterBottom>QR Code PIX</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+                    <QRCodeSVG value={generatePixPayload()} size={200} />
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Chave PIX: {pixKey}
+                  </Typography>
+                  <Button
+                    startIcon={<ContentCopyIcon />}
+                    onClick={handleCopyPixKey}
+                    size="small"
+                    sx={{ mt: 1 }}
+                  >
+                    Copiar Chave PIX
+                  </Button>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="caption" color="text.secondary">
+                    O cliente pode escanear o QR Code ou copiar a chave PIX para realizar o pagamento
+                  </Typography>
+                </>
+              ) : (
+                <Alert severity="warning">
+                  Você precisa cadastrar uma chave PIX no seu perfil para usar esta opção.
+                </Alert>
+              )}
+            </Box>
+          )}
+
+          {selectedPaymentMethod === 'card' && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Envie o link de pagamento por cartão para o cliente.
+            </Alert>
+          )}
+
+          {selectedPaymentMethod === 'transfer' && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Envie seus dados bancários para o cliente realizar a transferência.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseChargeDialog}>Fechar</Button>
+          <Button
+            variant="outlined"
+            startIcon={<EmailIcon />}
+            onClick={handleSendReminder}
+            disabled={chargeLoading}
+          >
+            {chargeLoading ? 'Enviando...' : 'Enviar Lembrete por Email'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog para visualizar recibo (Melhorado) */}
+      <Dialog
+        open={openReceiptDialog}
         onClose={handleCloseReceiptDialog}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Recibo de Pagamento</DialogTitle>
-        <DialogContent>
-          <Paper elevation={0} sx={{ p: 2, border: '1px dashed #ccc' }}>
-            <Box sx={{ textAlign: 'center', mb: 2 }}>
-              <Typography variant="h5">TechAssist</Typography>
-              <Typography variant="body2">Sistema de Assistência Técnica</Typography>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="h6">RECIBO DE PAGAMENTO</Typography>
+        <DialogTitle sx={{ bgcolor: '#f5f5f5', borderBottom: '1px solid #ddd' }}>
+          Recibo #{selectedPayment?.ticketId}
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <Paper elevation={0} sx={{ p: 4, border: '1px solid #eee' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 4 }}>
+              <Box>
+                <Typography variant="h5" color="primary" sx={{ fontWeight: 'bold' }}>TechAssist</Typography>
+                <Typography variant="caption" color="text.secondary">Soluções em Informática</Typography>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="overline" display="block" gutterBottom>RECIBO DE PAGAMENTO</Typography>
+                <Typography variant="h6" color="success.main">PAGO</Typography>
+              </Box>
             </Box>
-            
+
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary">DE</Typography>
+                <Typography variant="subtitle2">{selectedPayment?.technician}</Typography>
+                <Typography variant="body2" color="text.secondary">Técnico Especializado</Typography>
+              </Grid>
+              <Grid item xs={6} sx={{ textAlign: 'right' }}>
+                <Typography variant="caption" color="text.secondary">PARA</Typography>
+                <Typography variant="subtitle2">{selectedPayment?.client}</Typography>
+                <Typography variant="body2" color="text.secondary">Cliente</Typography>
+              </Grid>
+            </Grid>
+
+            <Divider sx={{ mb: 2 }} />
+
             <Box sx={{ mb: 2 }}>
-              <Typography variant="body1">Número: {selectedPayment?.ticketId}</Typography>
-              <Typography variant="body1">
-                Data de Pagamento: {selectedPayment?.paidDate ? new Date(selectedPayment.paidDate).toLocaleDateString() : '-'}
-              </Typography>
+              <Grid container>
+                <Grid item xs={8}>
+                  <Typography variant="subtitle2">Descrição</Typography>
+                </Grid>
+                <Grid item xs={4} sx={{ textAlign: 'right' }}>
+                  <Typography variant="subtitle2">Valor</Typography>
+                </Grid>
+              </Grid>
             </Box>
-            
-            <Divider sx={{ my: 2 }} />
-            
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body1">Serviço: {selectedPayment?.description}</Typography>
-              {user?.role === 'client' ? (
-                <Typography variant="body1">Técnico: {selectedPayment?.technician}</Typography>
-              ) : (
-                <Typography variant="body1">Cliente: {selectedPayment?.client}</Typography>
-              )}
-              <Typography variant="body1">
-                Método de Pagamento: {selectedPayment?.paymentMethod ? getPaymentMethodLabel(selectedPayment.paymentMethod) : '-'}
-              </Typography>
+            <Box sx={{ mb: 4 }}>
+              <Grid container>
+                <Grid item xs={8}>
+                  <Typography variant="body2">{selectedPayment?.description}</Typography>
+                  <Typography variant="caption" color="text.secondary">Ticket: {selectedPayment?.ticketId}</Typography>
+                </Grid>
+                <Grid item xs={4} sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2">R$ {selectedPayment?.amount?.toFixed(2)}</Typography>
+                </Grid>
+              </Grid>
             </Box>
-            
-            <Box sx={{ textAlign: 'right', mt: 3 }}>
-              <Typography variant="h6">
-                Valor Total: R$ {selectedPayment?.amount?.toFixed(2)}
-              </Typography>
-            </Box>
-            
-            <Box sx={{ textAlign: 'center', mt: 4, pt: 4, borderTop: '1px dashed #ccc' }}>
-              <Typography variant="body2">Este recibo é a confirmação de pagamento pelo serviço prestado.</Typography>
-              <Typography variant="body2">TechAssist - CNPJ: 12.345.678/0001-90</Typography>
+
+            <Divider sx={{ mb: 2 }} />
+
+            <Grid container sx={{ mb: 4 }}>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary">Data do Pagamento</Typography>
+                <Typography variant="body2">
+                  {selectedPayment?.paidDate ? new Date(selectedPayment.paidDate).toLocaleDateString() : '-'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6} sx={{ textAlign: 'right' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Total</Typography>
+                <Typography variant="h5" color="primary">R$ {selectedPayment?.amount?.toFixed(2)}</Typography>
+              </Grid>
+            </Grid>
+
+            <Box sx={{ textAlign: 'center', color: 'text.secondary' }}>
+              <Typography variant="caption">Obrigado pela preferência!</Typography>
             </Box>
           </Paper>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ p: 2, bgcolor: '#f5f5f5', borderTop: '1px solid #ddd' }}>
           <Button onClick={handleCloseReceiptDialog}>Fechar</Button>
+          <Button startIcon={<EmailIcon />} onClick={handleSendReceiptEmail} disabled={chargeLoading}>
+            {chargeLoading ? 'Enviando...' : 'Enviar por Email'}
+          </Button>
           <Button variant="contained" startIcon={<DownloadIcon />}>
-            Download PDF
+            Baixar PDF
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Dialog de filtros */}
-      <Dialog 
-        open={openFilterDialog} 
+      <Dialog
+        open={openFilterDialog}
         onClose={handleCloseFilterDialog}
         maxWidth="sm"
         fullWidth
@@ -741,7 +930,7 @@ function Payments() {
             fullWidth
             label="Status"
             value={filterStatus}
-            onChange={(e)=>setFilterStatus(e.target.value)}
+            onChange={(e) => setFilterStatus(e.target.value)}
             margin="normal"
           >
             <MenuItem value="all">Todos</MenuItem>
@@ -758,7 +947,7 @@ function Payments() {
                 label="De"
                 InputLabelProps={{ shrink: true }}
                 value={filterFrom}
-                onChange={(e)=>setFilterFrom(e.target.value)}
+                onChange={(e) => setFilterFrom(e.target.value)}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -768,7 +957,7 @@ function Payments() {
                 label="Até"
                 InputLabelProps={{ shrink: true }}
                 value={filterTo}
-                onChange={(e)=>setFilterTo(e.target.value)}
+                onChange={(e) => setFilterTo(e.target.value)}
               />
             </Grid>
           </Grid>
@@ -781,22 +970,22 @@ function Payments() {
       </Dialog>
 
       {/* Relatório de pagamentos */}
-      <Dialog open={openReportDialog} onClose={()=>setOpenReportDialog(false)} maxWidth="md" fullWidth>
+      <Dialog open={openReportDialog} onClose={() => setOpenReportDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>Relatório de Pagamentos</DialogTitle>
         <DialogContent>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={4}>
-              <TextField select fullWidth label="Agrupar por" value={reportGroupBy} onChange={(e)=>setReportGroupBy(e.target.value)}>
+              <TextField select fullWidth label="Agrupar por" value={reportGroupBy} onChange={(e) => setReportGroupBy(e.target.value)}>
                 <MenuItem value="day">Dia</MenuItem>
                 <MenuItem value="month">Mês</MenuItem>
                 <MenuItem value="year">Ano</MenuItem>
               </TextField>
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField fullWidth type="date" label="De" InputLabelProps={{ shrink: true }} value={filterFrom} onChange={(e)=>setFilterFrom(e.target.value)} />
+              <TextField fullWidth type="date" label="De" InputLabelProps={{ shrink: true }} value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField fullWidth type="date" label="Até" InputLabelProps={{ shrink: true }} value={filterTo} onChange={(e)=>setFilterTo(e.target.value)} />
+              <TextField fullWidth type="date" label="Até" InputLabelProps={{ shrink: true }} value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
             </Grid>
           </Grid>
           <TableContainer sx={{ mt: 2 }}>
@@ -809,7 +998,7 @@ function Payments() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(reportData.rows || []).map((r)=> (
+                {(reportData.rows || []).map((r) => (
                   <TableRow key={r.period}>
                     <TableCell>{r.period}</TableCell>
                     <TableCell align="right">{r.count}</TableCell>
@@ -821,8 +1010,8 @@ function Payments() {
           </TableContainer>
         </DialogContent>
         <DialogActions>
-          <Button onClick={()=>setOpenReportDialog(false)}>Fechar</Button>
-          <Button onClick={async ()=>{
+          <Button onClick={() => setOpenReportDialog(false)}>Fechar</Button>
+          <Button onClick={async () => {
             try {
               if (!user?.token) return;
               const params = { groupBy: reportGroupBy };
@@ -830,11 +1019,11 @@ function Payments() {
               if (filterTo) params.to = filterTo;
               const resp = await axios.get('/api/payments/report', { params, headers: { Authorization: `Bearer ${user.token}` } });
               setReportData(resp.data || { rows: [] });
-            } catch {}
+            } catch { }
           }} variant="contained">Gerar</Button>
-          <Button onClick={()=>{
+          <Button onClick={() => {
             const rows = reportData.rows || [];
-            const csv = ['period,count,total'].concat(rows.map(r=>`${r.period},${r.count},${r.total}`)).join('\n');
+            const csv = ['period,count,total'].concat(rows.map(r => `${r.period},${r.count},${r.total}`)).join('\n');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -844,8 +1033,8 @@ function Payments() {
       </Dialog>
 
       {/* Dialog para adicionar método de pagamento */}
-      <Dialog 
-        open={openAddMethodDialog} 
+      <Dialog
+        open={openAddMethodDialog}
         onClose={handleCloseAddMethodDialog}
         maxWidth="sm"
         fullWidth
@@ -904,27 +1093,17 @@ function Payments() {
               </Grid>
             </Box>
           )}
-
-          {(methodType === 'pix' || methodType === 'bank_transfer') && (
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                Este é um mock: ao salvar, consideraremos que o método foi cadastrado com sucesso.
-              </Typography>
-            </Box>
-          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseAddMethodDialog}>Cancelar</Button>
-          <Button onClick={handleSavePaymentMethod} variant="contained">Salvar</Button>
+          <Button onClick={handleSavePaymentMethod} variant="contained" color="primary">
+            Salvar
+          </Button>
         </DialogActions>
       </Dialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
+      {/* Snackbar */}
+      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar}>
         <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
           {snackbar.message}
         </Alert>

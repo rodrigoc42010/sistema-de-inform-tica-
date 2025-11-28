@@ -602,6 +602,13 @@ const getMe = asyncHandler(async (req, res) => {
   if (effectiveRole === 'technician') {
     const rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
     const tech = rsTech.rowCount ? rsTech.rows[0] : null;
+
+    // Merge pixKey from technicians table into bankInfo
+    const bankInfo = user.bank_info || {};
+    if (tech?.pix_key) {
+      bankInfo.pixKey = tech.pix_key;
+    }
+
     return res.status(200).json({
       _id: user.id,
       name: user.name,
@@ -610,7 +617,8 @@ const getMe = asyncHandler(async (req, res) => {
       phone: user.phone,
       cpfCnpj: user.cpf_cnpj,
       address: user.address || {},
-      bankInfo: user.bank_info || {},
+      bankInfo,
+      pixKey: tech?.pix_key || null, // Also include at root level for easy access
       services: tech?.services || [],
       specialties: tech?.specialties || [],
       pickupService: tech?.pickup_service || false,
@@ -684,28 +692,44 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         [name, email, phone, cpf_cnpj, address, bank_info, profile_image, passwordSql, passwordChangedAt, user.id]
       );
 
-      // Se for técnico e mudou o endereço, atualizar coordenadas
-      if (user.role === 'technician' && req.body.address) {
-        try {
-          const coords = await GeocodingService.getCoordinates(req.body.address);
-          if (coords) {
-            await pool.query(
-              'UPDATE technicians SET latitude=$1, longitude=$2, address_street=$3, address_number=$4, address_city=$5, address_state=$6, address_zipcode=$7 WHERE user_id=$8',
-              [
-                coords.latitude,
-                coords.longitude,
-                req.body.address.street,
-                req.body.address.number,
-                req.body.address.city,
-                req.body.address.state,
-                req.body.address.zipcode,
-                user.id
-              ]
-            );
-            console.log(`Coordenadas atualizadas para técnico ${user.id}: ${coords.latitude}, ${coords.longitude}`);
+      // Se for técnico, atualizar dados específicos na tabela technicians
+      if (user.role === 'technician') {
+        // Atualizar coordenadas se mudou o endereço
+        if (req.body.address) {
+          try {
+            const coords = await GeocodingService.getCoordinates(req.body.address);
+            if (coords) {
+              await pool.query(
+                'UPDATE technicians SET latitude=$1, longitude=$2, address_street=$3, address_number=$4, address_city=$5, address_state=$6, address_zipcode=$7 WHERE user_id=$8',
+                [
+                  coords.latitude,
+                  coords.longitude,
+                  req.body.address.street,
+                  req.body.address.number,
+                  req.body.address.city,
+                  req.body.address.state,
+                  req.body.address.zipcode,
+                  user.id
+                ]
+              );
+              console.log(`Coordenadas atualizadas para técnico ${user.id}: ${coords.latitude}, ${coords.longitude}`);
+            }
+          } catch (geoError) {
+            console.error('Erro ao atualizar coordenadas no perfil:', geoError.message);
           }
-        } catch (geoError) {
-          console.error('Erro ao atualizar coordenadas no perfil:', geoError.message);
+        }
+
+        // Atualizar chave PIX se fornecida
+        if (req.body.bankInfo?.pixKey !== undefined) {
+          try {
+            await pool.query(
+              'UPDATE technicians SET pix_key=$1 WHERE user_id=$2',
+              [req.body.bankInfo.pixKey || null, user.id]
+            );
+            console.log(`Chave PIX atualizada para técnico ${user.id}`);
+          } catch (pixError) {
+            console.error('Erro ao atualizar chave PIX:', pixError.message);
+          }
         }
       }
       const rsUpdated = await pool.query('SELECT * FROM users WHERE id=$1', [user.id]);
