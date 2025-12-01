@@ -8,6 +8,74 @@ router.get('/', (req, res) => {
   res.status(200).json({ message: 'Rotas de técnicos funcionando' });
 });
 
+// Buscar técnicos próximos
+router.get('/nearby', async (req, res, next) => {
+  try {
+    const { lat, lng, radius = 10 } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ message: 'Latitude e longitude são obrigatórias' });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    const radiusKm = parseFloat(radius);
+
+    const pool = getPool();
+
+    // Buscar técnicos com geolocalização
+    const query = `
+      SELECT 
+        t.id, 
+        t.user_id,
+        u.name, 
+        t.specialties, 
+        t.rating, 
+        t.total_reviews,
+        t.latitude, 
+        t.longitude
+      FROM technicians t
+      JOIN users u ON t.user_id = u.id
+      WHERE t.latitude IS NOT NULL AND t.longitude IS NOT NULL
+    `;
+
+    const result = await pool.query(query);
+
+    // Calcular distância e filtrar (cálculo simples via Haversine no JS para simplificar, 
+    // idealmente seria via PostGIS mas vamos manter compatível com estrutura atual)
+    const technicians = result.rows.map(tech => {
+      const techLat = parseFloat(tech.latitude);
+      const techLng = parseFloat(tech.longitude);
+
+      // Fórmula de Haversine
+      const R = 6371; // Raio da Terra em km
+      const dLat = (techLat - latitude) * Math.PI / 180;
+      const dLon = (techLng - longitude) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(latitude * Math.PI / 180) * Math.cos(techLat * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c; // Distância em km
+
+      return {
+        _id: tech.id, // Frontend espera _id ou id
+        id: tech.id,
+        userId: tech.user_id,
+        name: tech.business_name || tech.name,
+        specialties: typeof tech.specialties === 'string' ? JSON.parse(tech.specialties) : (tech.specialties || []),
+        rating: parseFloat(tech.rating || 0),
+        distance: parseFloat(distance.toFixed(1))
+      };
+    }).filter(tech => tech.distance <= radiusKm)
+      .sort((a, b) => a.distance - b.distance);
+
+    res.json(technicians);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Adicionar avaliação de técnico por ticket concluído
 router.post('/:technicianId/reviews', protect, clientOnly, async (req, res, next) => {
   try {

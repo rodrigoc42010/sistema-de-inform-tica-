@@ -30,7 +30,6 @@ const getLocalServices = asyncHandler(async (req, res) => {
       u.id,
       u.name,
       u.email,
-      t.business_name,
       t.business_phone,
       t.business_description,
       t.specialties,

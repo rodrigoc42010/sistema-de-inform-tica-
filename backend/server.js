@@ -105,7 +105,7 @@ app.use(
         'https://randomuser.me',
         'https://via.placeholder.com'
       ],
-      connectSrc: cspConnectSrc,
+      connectSrc: ["'self'", 'https:', 'wss:', 'ws:', 'http://localhost:5001', 'http://127.0.0.1:5001'],
       scriptSrc: cspScriptSrc,
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'", 'data:'],

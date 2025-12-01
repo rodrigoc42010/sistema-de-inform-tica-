@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { selectUser } from '../selectors/authSelectors';
 import {
@@ -12,24 +12,44 @@ import {
   DarkMode, TextFields, Contrast, LocationOn, Public
 } from '@mui/icons-material';
 import Sidebar from '../components/Sidebar';
+import { toast } from 'react-toastify';
 
 function Settings() {
   const user = useSelector(selectUser);
   const [successMessage, setSuccessMessage] = useState('');
 
-  const [settings, setSettings] = useState({
-    notifications: {
-      email: true, push: true, sms: false,
-      newTickets: true, ticketUpdates: true, marketing: false,
-    },
-    appearance: {
-      theme: 'dark', fontSize: 'medium', highContrast: false,
-    },
-    privacy: {
-      showProfile: true, showOnlineStatus: true, allowLocationAccess: true,
-    },
-    language: 'pt-BR',
-  });
+  // Load settings from localStorage or use defaults
+  const loadSettings = () => {
+    const savedSettings = localStorage.getItem('userSettings');
+    if (savedSettings) {
+      try {
+        return JSON.parse(savedSettings);
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    }
+    return {
+      notifications: {
+        email: true, push: true, sms: false,
+        newTickets: true, ticketUpdates: true, marketing: false,
+      },
+      appearance: {
+        theme: 'dark', fontSize: 'medium', highContrast: false,
+      },
+      privacy: {
+        showProfile: true, showOnlineStatus: true, allowLocationAccess: true,
+      },
+      language: 'pt-BR',
+    };
+  };
+
+  const [settings, setSettings] = useState(loadSettings());
+
+  // Load settings on component mount
+  useEffect(() => {
+    const savedSettings = loadSettings();
+    setSettings(savedSettings);
+  }, []);
 
   const handleNotificationChange = (e) => {
     setSettings({ ...settings, notifications: { ...settings.notifications, [e.target.name]: e.target.checked } });
@@ -49,8 +69,21 @@ function Settings() {
   };
 
   const handleSaveSettings = () => {
-    setSuccessMessage('Configurações salvas com sucesso!');
-    setTimeout(() => setSuccessMessage(''), 3000);
+    try {
+      // Save to localStorage
+      localStorage.setItem('userSettings', JSON.stringify(settings));
+
+      // Show success message
+      setSuccessMessage('Configurações salvas com sucesso!');
+      toast.success('Configurações salvas com sucesso!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+
+      // TODO: In the future, also save to backend
+      // await dispatch(updateUserSettings(settings)).unwrap();
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Erro ao salvar configurações');
+    }
   };
 
   // Custom Switch Style

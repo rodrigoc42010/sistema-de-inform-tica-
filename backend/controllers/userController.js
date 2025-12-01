@@ -174,9 +174,25 @@ const registerUser = asyncHandler(async (req, res) => {
             .map((cert) => cert.trim())
             .filter(Boolean);
         }
+
+        // Geocoding
+        let lat = null;
+        let lng = null;
+        if (address) {
+          try {
+            const coords = await GeocodingService.getCoordinates(address);
+            if (coords) {
+              lat = coords.latitude;
+              lng = coords.longitude;
+            }
+          } catch (e) {
+            console.error('Geocoding failed during registration:', e.message);
+          }
+        }
+
         await client.query(
-          'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-          [tData.user_id, tData.login_id, JSON.stringify(tData.services), JSON.stringify(tData.specialties), tData.pickup_service, tData.pickup_fee, JSON.stringify(tData.payment_methods)]
+          'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods,latitude,longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+          [tData.user_id, tData.login_id, JSON.stringify(tData.services), JSON.stringify(tData.specialties), tData.pickup_service, tData.pickup_fee, JSON.stringify(tData.payment_methods), lat, lng]
         );
       }
 
@@ -520,9 +536,26 @@ const upgradeToTechnician = asyncHandler(async (req, res) => {
     const specialties = req.body.technician?.certifications
       ? req.body.technician.certifications.split(',').map((c) => c.trim()).filter(Boolean)
       : [];
+
+    // Geocoding
+    let lat = null;
+    let lng = null;
+    const addressToGeocode = req.body.address || user.address;
+    if (addressToGeocode) {
+      try {
+        const coords = await GeocodingService.getCoordinates(addressToGeocode);
+        if (coords) {
+          lat = coords.latitude;
+          lng = coords.longitude;
+        }
+      } catch (e) {
+        console.error('Geocoding failed during upgrade:', e.message);
+      }
+    }
+
     await pool.query(
-      'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [user.id, loginId, JSON.stringify(services), JSON.stringify(specialties), pickupService, pickupFee, JSON.stringify(paymentMethods)]
+      'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods,latitude,longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [user.id, loginId, JSON.stringify(services), JSON.stringify(specialties), pickupService, pickupFee, JSON.stringify(paymentMethods), lat, lng]
     );
     rsTech = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
   }

@@ -96,7 +96,7 @@ function NewTicket() {
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
         const token = storedUser.token;
 
-        const response = await fetch('http://localhost:5001/api/users/technicians', {
+        const response = await fetch('/api/users/technicians', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'

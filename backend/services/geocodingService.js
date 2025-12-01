@@ -12,7 +12,13 @@ class GeocodingService {
      */
     static async getCoordinates(address) {
         try {
-            const fullAddress = `${address.street}, ${address.number}, ${address.city}, ${address.state}, ${address.zipcode}, Brazil`;
+            const street = address.street || '';
+            const number = address.number || '';
+            const city = address.city || '';
+            const state = address.state || '';
+            const zip = address.zipcode || address.zipCode || address.cep || '';
+
+            const fullAddress = `${street}, ${number}, ${city}, ${state}, ${zip}, Brazil`.replace(/, ,/g, ',');
 
             const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
                 params: {
@@ -30,6 +36,7 @@ class GeocodingService {
                 };
             }
 
+            console.log('Google Maps Response:', JSON.stringify(response.data));
             console.warn(`Geocoding failed for address: ${fullAddress}`);
             return null;
         } catch (error) {
