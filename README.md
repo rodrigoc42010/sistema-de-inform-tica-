@@ -6,7 +6,7 @@ Sistema completo para gerenciamento de chamados técnicos na área de informáti
 ## Tecnologias Utilizadas
 - **Frontend**: React.js, Material-UI
 - **Backend**: Node.js, Express
-- **Banco de Dados**: MongoDB (dev) e PostgreSQL (prod opcional)
+- **Banco de Dados**: PostgreSQL 
 - **Autenticação**: JWT
 - **Geolocalização**: Google Maps API
 - **Upload de Arquivos**: Multer, AWS S3
