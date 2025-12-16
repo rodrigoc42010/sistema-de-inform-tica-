@@ -10,6 +10,7 @@ const path = require('path');
 const { errorHandler } = require('./middleware/errorMiddleware');
 const { maskIP, getRequestIP } = require('./middleware/auditLogger');
 const connectDB = require('./config/db');
+const { scheduleBackup } = require('./scripts/schedule-backup');
 
 // OAuth
 // Removido: autenticação social via Google/Microsoft
@@ -17,6 +18,8 @@ const connectDB = require('./config/db');
 // const GoogleStrategy = require('passport-google-oauth20').Strategy;
 // const MicrosoftStrategy = require('passport-microsoft').Strategy;
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const requestId = require('./middleware/requestId');
 
 // Segurança
 const helmet = require('helmet');
@@ -42,7 +45,8 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const missingVars = [];
 if (!process.env.JWT_SECRET) missingVars.push('JWT_SECRET');
-if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) missingVars.push('DATABASE_URL/POSTGRES_URL');
+if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL)
+  missingVars.push('DATABASE_URL/POSTGRES_URL');
 if (missingVars.length) {
   logger.warn(`Variáveis de ambiente ausentes: ${missingVars.join(', ')}`);
 }
@@ -52,7 +56,9 @@ if (process.env.NODE_ENV === 'production') {
   const jwtSecret = process.env.JWT_SECRET;
   if (!jwtSecret || jwtSecret.length < 32 || jwtSecret.includes('troque')) {
     logger.error('ERRO CRÍTICO: JWT_SECRET inválido ou inseguro em produção!');
-    logger.error('JWT_SECRET deve ter pelo menos 32 caracteres e não conter valores padrão.');
+    logger.error(
+      'JWT_SECRET deve ter pelo menos 32 caracteres e não conter valores padrão.'
+    );
     process.exit(1);
   }
   logger.info('JWT_SECRET validado com sucesso');
@@ -62,6 +68,9 @@ if (process.env.NODE_ENV === 'production') {
 let dbConnected = false;
 connectDB().then((connected) => {
   dbConnected = connected;
+  if (connected) {
+    scheduleBackup();
+  }
 });
 
 const app = express();
@@ -75,16 +84,20 @@ const trustProxyEnv = process.env.TRUST_PROXY;
 let trustProxyConfig = false;
 if (isProd) {
   if (trustProxyEnv === 'true') trustProxyConfig = 1;
-  else if (trustProxyEnv === 'false' || !trustProxyEnv) trustProxyConfig = false;
+  else if (trustProxyEnv === 'false' || !trustProxyEnv)
+    trustProxyConfig = false;
   else trustProxyConfig = trustProxyEnv; // aceita 'loopback', '127.0.0.1', lista, etc.
 }
 app.set('trust proxy', trustProxyConfig);
 
-app.use((req, res, next) => { next(); });
+app.use(requestId);
 
 // Endurecimento básico (antes de rotas)
 app.use(helmet());
-const gaEnabled = !!process.env.REACT_APP_GA_MEASUREMENT_ID || !!process.env.GA_MEASUREMENT_ID;
+app.use(helmet.noSniff());
+app.use(helmet.frameguard({ action: 'deny' }));
+const gaEnabled =
+  !!process.env.REACT_APP_GA_MEASUREMENT_ID || !!process.env.GA_MEASUREMENT_ID;
 const cspScriptSrc = ["'self'"];
 const cspConnectSrc = ["'self'", 'https:', 'wss:', 'ws:'];
 if (gaEnabled) {
@@ -103,55 +116,47 @@ app.use(
         'https:',
         'https://images.unsplash.com',
         'https://randomuser.me',
-        'https://via.placeholder.com'
+        'https://via.placeholder.com',
       ],
-      connectSrc: ["'self'", 'https:', 'wss:', 'ws:', 'http://localhost:5001', 'http://127.0.0.1:5001'],
+      connectSrc: [
+        "'self'",
+        'https:',
+        'wss:',
+        'ws:',
+        'http://localhost:5001',
+        'http://127.0.0.1:5001',
+      ],
       scriptSrc: cspScriptSrc,
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'", 'data:'],
       objectSrc: ["'none'"],
       frameAncestors: ["'self'"],
-      upgradeInsecureRequests: []
+      upgradeInsecureRequests: [],
     },
   })
 );
-app.use(helmet.hsts({ maxAge: 31536000, includeSubDomains: true, preload: true }));
+if (isProd) {
+  app.use(
+    helmet.hsts({ maxAge: 31536000, includeSubDomains: true, preload: true })
+  );
+}
 app.use(helmet.referrerPolicy({ policy: 'no-referrer' }));
 app.use(helmet.crossOriginEmbedderPolicy());
 app.use(helmet.crossOriginOpenerPolicy());
 app.use(helmet.crossOriginResourcePolicy({ policy: 'same-site' }));
-app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=(), camera=()'); next(); });
-app.use(hpp());
-app.use(mongoSanitize());
-// Sanitização de entrada (substitui xss-clean)
-const xssOptions = { whiteList: {}, stripIgnoreTag: true, stripIgnoreTagBody: ['script', 'style', 'iframe'] };
-const sanitizeString = (s) => (typeof s === 'string' ? xss(s, xssOptions) : s);
-const deepSanitize = (val) => {
-  if (val == null) return val;
-  if (typeof val === 'string') return sanitizeString(val);
-  if (Array.isArray(val)) return val.map(deepSanitize);
-  if (typeof val === 'object') {
-    for (const k of Object.keys(val)) val[k] = deepSanitize(val[k]);
-    return val;
-  }
-  return val;
-};
 app.use((req, res, next) => {
-  try {
-    if (req.body) req.body = deepSanitize(req.body);
-    if (req.query) req.query = deepSanitize(req.query);
-    if (req.params) req.params = deepSanitize(req.params);
-  } catch (e) {
-    console.warn('Falha ao sanitizar entrada:', e.message);
-  }
+  res.setHeader(
+    'Permissions-Policy',
+    'geolocation=(self), microphone=(), camera=()'
+  );
   next();
 });
+app.use(hpp());
+app.use(mongoSanitize());
+app.use(require('./middleware/validateInput'));
 
-// CORS: whitelist mesmo em desenvolvimento para maior segurança
-const devOrigins = ['http://localhost:3000', 'http://localhost:5000', 'http://localhost:5001'];
-const allowedOriginsEnv = process.env.ALLOWED_ORIGINS || '';
-const prodOrigins = allowedOriginsEnv.split(',').map((o) => o.trim()).filter(Boolean);
-const allowedOrigins = process.env.NODE_ENV === 'production' ? prodOrigins : devOrigins;
+const { corsOrigins } = require('./config/appConfig');
+const allowedOrigins = corsOrigins;
 
 app.use(
   cors({
@@ -160,7 +165,10 @@ app.use(
       if (!origin) return callback(null, true);
 
       // Em produção sem ALLOWED_ORIGINS configurado, bloquear tudo
-      if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+      if (
+        process.env.NODE_ENV === 'production' &&
+        allowedOrigins.length === 0
+      ) {
         logger.warn(`CORS bloqueado: nenhuma origem configurada em produção`);
         return callback(new Error('CORS não configurado'));
       }
@@ -189,7 +197,8 @@ if (compression) {
 
 // HTTP request logger (se disponível)
 if (morgan && logger.stream) {
-  const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
+  const morganFormat =
+    process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
   app.use(morgan(morganFormat, { stream: logger.stream }));
   logger.info('Morgan HTTP logger ativado');
 }
@@ -203,7 +212,10 @@ app.use((req, res, next) => {
   if (logger.http) {
     logger.http(`Acesso de IP: ${maskedIP} - ${req.method} ${req.path}`);
   } else {
-    console.log(`[${timestamp}] Acesso de IP: ${maskedIP} - ${req.method} ${req.path}`.cyan);
+    console.log(
+      `[${timestamp}] Acesso de IP: ${maskedIP} - ${req.method} ${req.path}`
+        .cyan
+    );
   }
   next();
 });
@@ -232,7 +244,9 @@ const maskEmail = (email) => {
 
 // Auditoria de tentativas de autenticação (formato unificado)
 app.use((req, res, next) => {
-  const isLogin = req.path.includes('/api/users/login') || req.path.includes('/api/users/technician-login');
+  const isLogin =
+    req.path.includes('/api/users/login') ||
+    req.path.includes('/api/users/technician-login');
   const isRegister = req.path === '/api/users' && req.method === 'POST';
   const isAuthRoute = isLogin || isRegister;
   if (!isAuthRoute) return next();
@@ -244,23 +258,34 @@ app.use((req, res, next) => {
 
   res.on('finish', () => {
     try {
-      const email = req.body && typeof req.body.email === 'string' ? req.body.email.slice(0, 200) : undefined;
+      const email =
+        req.body && typeof req.body.email === 'string'
+          ? req.body.email.slice(0, 200)
+          : undefined;
       const entry = {
         timestamp: startedAt,
         event: isRegister
-          ? (res.statusCode >= 200 && res.statusCode < 400 ? 'REGISTER' : 'REGISTER_FAILED')
-          : (res.statusCode >= 200 && res.statusCode < 400 ? 'LOGIN' : 'LOGIN_FAILED'),
+          ? res.statusCode >= 200 && res.statusCode < 400
+            ? 'REGISTER'
+            : 'REGISTER_FAILED'
+          : res.statusCode >= 200 && res.statusCode < 400
+            ? 'LOGIN'
+            : 'LOGIN_FAILED',
         user: { email: maskEmail(email) }, // Email mascarado para segurança
         connection: {
           ip: maskedIP,
           userAgent: ua,
           method: req.method,
-          path: req.path
+          path: req.path,
         },
         success: res.statusCode >= 200 && res.statusCode < 400,
-        status: res.statusCode
+        status: res.statusCode,
       };
-      fs.appendFile(path.join(logsDir, 'login-audit.log'), JSON.stringify(entry) + '\n', () => { });
+      fs.appendFile(
+        path.join(logsDir, 'login-audit.log'),
+        JSON.stringify(entry) + '\n',
+        () => {}
+      );
     } catch (err) {
       logger.error('Falha ao gravar log de login:', err?.message || err);
     }
@@ -283,7 +308,7 @@ if (slowDown) {
   const loginSpeedLimiter = slowDown({
     windowMs: 15 * 60 * 1000,
     delayAfter: 3,
-    delayMs: 500
+    delayMs: 500,
   });
   app.use('/api/users/login', loginSpeedLimiter);
   app.use('/api/users/technician-login', loginSpeedLimiter);
@@ -291,53 +316,87 @@ if (slowDown) {
 }
 
 // Rate limiters específicos para autenticação (mitigação de brute force)
+const { rateLimits } = require('./config/appConfig');
 const authLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 min
-  max: 10,
+  windowMs: rateLimits.login.windowMs,
+  max: rateLimits.login.max,
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Muitas tentativas de login. Tente novamente em alguns minutos.',
 });
 app.use('/api/users/login', authLimiter);
 app.use('/api/users/technician-login', authLimiter);
-app.use('/api/users/auth/', rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }));
+app.use(
+  '/api/users/auth/',
+  rateLimit({
+    windowMs: rateLimits.authSensitive.windowMs,
+    max: rateLimits.authSensitive.max,
+  })
+);
+
+const registerLimiter = rateLimit({
+  windowMs: rateLimits.registration.windowMs,
+  max: rateLimits.registration.max,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/users', (req, res, next) => {
+  if (req.method === 'POST' && req.path === '/')
+    return registerLimiter(req, res, next);
+  next();
+});
 
 // Rate limiters para rotas sensíveis
 const ticketLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
-  message: 'Muitas requisições de tickets. Tente novamente mais tarde.'
+  message: 'Muitas requisições de tickets. Tente novamente mais tarde.',
 });
 
 const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  message: 'Muitos uploads. Tente novamente mais tarde.'
+  message: 'Muitos uploads. Tente novamente mais tarde.',
 });
 
 app.use('/api/tickets', ticketLimiter);
 app.use('/api/uploads', uploadLimiter);
+app.use('/api/upload', uploadLimiter);
 app.use('/api/payments', ticketLimiter);
 
 logger.info('Rate limiting configurado para todas as rotas sensíveis');
 
 // Rotas da API
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/technicians', require('./routes/technicianRoutes'));
-app.use('/api/tickets', require('./routes/ticketRoutes'));
-app.use('/api/payments', require('./routes/paymentRoutes'));
-app.use('/api/uploads', require('./routes/uploadRoutes'));
-app.use('/api/ads', require('./routes/adRoutes'));
-app.use('/api/services', require('./routes/serviceRoutes'));
+const serviceRoutes = require('./routes/serviceRoutes');
+const userRoutes = require('./routes/userRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
+const osRoutes = require('./routes/osRoutes');
+const technicianRoutes = require('./routes/technicianRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const adRoutes = require('./routes/adRoutes');
+const technicianUpgradeRoutes = require('./routes/technicianUpgradeRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
-// Utilidades: CEP (proxy ViaCEP)
+app.use('/api/services', serviceRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/tickets', ticketRoutes);
+app.use('/api/os', osRoutes);
+app.use('/api/technicians', technicianRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/ads', adRoutes);
+app.use('/api/technician-upgrade', technicianUpgradeRoutes);
+app.use('/api/admin', adminRoutes);
+
 app.get('/api/cep/:cep', async (req, res) => {
   try {
-    const cep = String(req.params.cep || '').replace(/\D/g, '');
-    if (cep.length !== 8) return res.status(400).json({ error: 'CEP inválido' });
+    const cep = String(req.params.cep || '').replace(/\D+/g, '');
     const resp = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
     const data = await resp.json();
-    if (!data || data.erro) return res.status(404).json({ error: 'CEP não encontrado' });
+    if (!data || data.erro)
+      return res.status(404).json({ error: 'CEP não encontrado' });
     return res.json(data);
   } catch (e) {
     return res.status(500).json({ error: 'Falha ao consultar CEP' });
@@ -352,6 +411,11 @@ app.get('/api/status', (req, res) => {
     message: 'Servidor funcionando corretamente',
     serverTime: new Date().toISOString(),
   });
+});
+
+// 404 JSON para endpoints /api desconhecidos
+app.use('/api', (req, res, next) => {
+  res.status(404).json({ message: 'Endpoint não encontrado', code: 404 });
 });
 
 // Arquivos estáticos
@@ -378,7 +442,11 @@ if (fs.existsSync(buildIndex)) {
 } else {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
-    res.status(200).send('<!doctype html><html><head><meta charset="utf-8"><title>Servidor online</title></head><body><h1>Servidor online</h1><p>Build do frontend ausente. Execute <code>npm run build --prefix frontend</code> ou aguarde o deploy concluir.</p></body></html>');
+    res
+      .status(200)
+      .send(
+        '<!doctype html><html><head><meta charset="utf-8"><title>Servidor online</title></head><body><h1>Servidor online</h1><p>Build do frontend ausente. Execute <code>npm run build --prefix frontend</code> ou aguarde o deploy concluir.</p></body></html>'
+      );
   });
 }
 
@@ -391,7 +459,10 @@ const HTTPS_PORT = process.env.HTTPS_PORT || 5443;
 
 // Servidor HTTP
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor HTTP rodando em ${process.env.NODE_ENV} na porta ${PORT}`.yellow.bold);
+  console.log(
+    `Servidor HTTP rodando em ${process.env.NODE_ENV} na porta ${PORT}`.yellow
+      .bold
+  );
 });
 
 // Servidor HTTPS (opcional)
@@ -401,23 +472,39 @@ app.listen(PORT, '0.0.0.0', () => {
     return;
   }
   try {
-    const keyPath = process.env.SSL_KEY_PATH || path.join(__dirname, '../ssl/key.pem');
-    const certPath = process.env.SSL_CERT_PATH || path.join(__dirname, '../ssl/cert.pem');
+    const keyPath =
+      process.env.SSL_KEY_PATH || path.join(__dirname, '../ssl/key.pem');
+    const certPath =
+      process.env.SSL_CERT_PATH || path.join(__dirname, '../ssl/cert.pem');
     if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
       const sslOptions = {
         key: fs.readFileSync(keyPath),
         cert: fs.readFileSync(certPath),
       };
       https.createServer(sslOptions, app).listen(HTTPS_PORT, '0.0.0.0', () => {
-        console.log(`Servidor HTTPS rodando em ${process.env.NODE_ENV} na porta ${HTTPS_PORT}`.green.bold);
-        console.log(`Acessível externamente via IP 45.188.152.240 (criptografado)`.green.bold);
-        console.log(`URL de acesso: https://45.188.152.240:${HTTPS_PORT}`.cyan.bold);
+        console.log(
+          `Servidor HTTPS rodando em ${process.env.NODE_ENV} na porta ${HTTPS_PORT}`
+            .green.bold
+        );
+        console.log(
+          `Acessível externamente via IP 45.188.152.240 (criptografado)`.green
+            .bold
+        );
+        console.log(
+          `URL de acesso: https://45.188.152.240:${HTTPS_PORT}`.cyan.bold
+        );
       });
     } else {
-      console.warn(`Certificados SSL não encontrados em ${keyPath} e/ou ${certPath}; HTTPS desativado. Use SSL_KEY_PATH e SSL_CERT_PATH para configurar.`.magenta);
+      console.warn(
+        `Certificados SSL não encontrados em ${keyPath} e/ou ${certPath}; HTTPS desativado. Use SSL_KEY_PATH e SSL_CERT_PATH para configurar.`
+          .magenta
+      );
     }
   } catch (e) {
-    console.warn(`Falha ao iniciar HTTPS: ${e.message}. Continuando apenas com HTTP.`.magenta);
+    console.warn(
+      `Falha ao iniciar HTTPS: ${e.message}. Continuando apenas com HTTP.`
+        .magenta
+    );
   }
 })();
 // Removido o fallback "OK" para não mascarar a SPA

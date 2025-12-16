@@ -6,16 +6,24 @@ const { getPool } = require('../db/pgClient');
 // Private (technician)
 // Tabela de preços (em BRL)
 const AD_PRICING = {
-  basic: { 7: 19.90, 15: 34.90, 30: 59.90 },
-  intermediate: { 7: 29.90, 15: 54.90, 30: 99.90 },
-  premium: { 7: 49.90, 15: 89.90, 30: 159.90 }
+  basic: { 7: 19.9, 15: 34.9, 30: 59.9 },
+  intermediate: { 7: 29.9, 15: 54.9, 30: 99.9 },
+  premium: { 7: 49.9, 15: 89.9, 30: 159.9 },
 };
 
 // Criar anúncio (técnico)
 // POST /api/ads
 // Private (technician)
 const createAd = asyncHandler(async (req, res) => {
-  const { title, text, linkUrl, mediaUrl, audience, tier = 'basic', duration = 30 } = req.body;
+  const {
+    title,
+    text,
+    linkUrl,
+    mediaUrl,
+    audience,
+    tier = 'basic',
+    duration = 30,
+  } = req.body;
 
   if (!title || !text) {
     res.status(400);
@@ -27,7 +35,9 @@ const createAd = asyncHandler(async (req, res) => {
   const validDurations = [7, 15, 30];
 
   const selectedTier = validTiers.includes(tier) ? tier : 'basic';
-  const selectedDuration = validDurations.includes(Number(duration)) ? Number(duration) : 30;
+  const selectedDuration = validDurations.includes(Number(duration))
+    ? Number(duration)
+    : 30;
 
   // Calcular preço
   const price = AD_PRICING[selectedTier][selectedDuration];
@@ -48,7 +58,7 @@ const createAd = asyncHandler(async (req, res) => {
       price,
       'pending',
       'pending_payment',
-      req.user.id || req.user._id
+      req.userId,
     ]
   );
 
@@ -71,7 +81,7 @@ const payAd = asyncHandler(async (req, res) => {
     throw new Error('Anúncio não encontrado');
   }
 
-  if (String(ad.created_by) !== String(req.user.id || req.user._id)) {
+  if (String(ad.created_by) !== String(req.userId)) {
     res.status(403);
     throw new Error('Permissão negada');
   }
@@ -95,7 +105,16 @@ const payAd = asyncHandler(async (req, res) => {
   try {
     await pool.query(
       'INSERT INTO payments (type, ad, technician, amount, currency, payment_method, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-      ['ad_fee', ad.id, req.user.id || req.user._id, ad.price, 'BRL', 'simulation', 'paid', `Pagamento Anúncio ${ad.tier} (${ad.duration_days} dias)`]
+      [
+        'ad_fee',
+        ad.id,
+        req.userId,
+        ad.price,
+        'BRL',
+        'simulation',
+        'paid',
+        `Pagamento Anúncio ${ad.tier} (${ad.duration_days} dias)`,
+      ]
     );
   } catch (e) {
     console.warn('Erro ao registrar log de pagamento:', e);
@@ -113,7 +132,11 @@ const listActiveAds = asyncHandler(async (req, res) => {
   const role = req.user.role;
 
   // Se cliente com adFree até o futuro, não retorna anúncios
-  if (role === 'client' && req.user.adFreeUntil && new Date(req.user.adFreeUntil) > now) {
+  if (
+    role === 'client' &&
+    req.user.adFreeUntil &&
+    new Date(req.user.adFreeUntil) > now
+  ) {
     return res.status(200).json([]);
   }
 
@@ -129,12 +152,19 @@ const listActiveAds = asyncHandler(async (req, res) => {
 // GET /api/ads/public
 // Public
 const listPublicAds = asyncHandler(async (req, res) => {
-  const now = new Date();
-  const pool3 = getPool();
-  const rs3 = await pool3.query(
-    `SELECT * FROM ads WHERE active=TRUE AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) AND (audience='all' OR audience='client') ORDER BY created_at DESC LIMIT 50`
-  );
-  return res.status(200).json(rs3.rows);
+  try {
+    const pool3 = getPool();
+    const rs3 = await pool3.query(
+      `SELECT * FROM ads WHERE active=TRUE AND (start_date IS NULL OR start_date <= NOW()) AND (end_date IS NULL OR end_date >= NOW()) AND (audience='all' OR audience='client') ORDER BY created_at DESC LIMIT 50`
+    );
+    return res.status(200).json(rs3.rows);
+  } catch (err) {
+    console.error(
+      '[ADS] Falha ao listar anúncios públicos:',
+      err?.message || err
+    );
+    return res.status(200).json([]);
+  }
 });
 
 // Comprar remoção de anúncios (cliente)
@@ -147,14 +177,22 @@ const purchaseAdRemoval = asyncHandler(async (req, res) => {
     throw new Error('Apenas clientes podem comprar remoção de anúncios');
   }
   // Valor fixo por mês (pode ser integrado ao Stripe no futuro)
-  const PRICE_PER_MONTH = Number(process.env.AD_FREE_PRICE_PER_MONTH_BRL || '9.9');
+  const PRICE_PER_MONTH = Number(
+    process.env.AD_FREE_PRICE_PER_MONTH_BRL || '9.9'
+  );
   const amount = Math.round(PRICE_PER_MONTH * months * 100) / 100;
 
   // Atualiza o campo adFreeUntil
-  const base = req.user.adFreeUntil && new Date(req.user.adFreeUntil) > new Date() ? new Date(req.user.adFreeUntil) : new Date();
+  const base =
+    req.user.adFreeUntil && new Date(req.user.adFreeUntil) > new Date()
+      ? new Date(req.user.adFreeUntil)
+      : new Date();
   base.setMonth(base.getMonth() + Number(months));
   const pool4 = getPool();
-  await pool4.query('UPDATE users SET ad_free_until=$1 WHERE id=$2', [base, req.user.id || req.user._id]);
+  await pool4.query('UPDATE users SET ad_free_until=$1 WHERE id=$2', [
+    base,
+    req.userId,
+  ]);
 
   // Integração Stripe (opcional; retorna clientSecret se configurado)
   let stripeInfo = null;
@@ -164,13 +202,28 @@ const purchaseAdRemoval = asyncHandler(async (req, res) => {
       const stripe = require('stripe')(stripeKey);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(amount * 100),
-        currency: (process.env.STRIPE_CURRENCY || 'brl'),
+        currency: process.env.STRIPE_CURRENCY || 'brl',
         automatic_payment_methods: { enabled: true },
-        metadata: { userId: String(req.user.id || req.user._id), months: String(months) },
+        metadata: { userId: String(req.userId), months: String(months) },
       });
-      stripeInfo = { clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id };
+      stripeInfo = {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      };
       try {
-        await pool4.query('INSERT INTO payments (type, client, amount, currency, payment_method, status, payment_intent_id, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', ['ad_free', req.user.id || req.user._id, amount, process.env.STRIPE_CURRENCY || 'BRL', 'stripe', 'processando', paymentIntent.id, `Ad-free por ${months} mês(es)`]);
+        await pool4.query(
+          'INSERT INTO payments (type, client, amount, currency, payment_method, status, payment_intent_id, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+          [
+            'ad_free',
+            req.userId,
+            amount,
+            process.env.STRIPE_CURRENCY || 'BRL',
+            'stripe',
+            'processando',
+            paymentIntent.id,
+            `Ad-free por ${months} mês(es)`,
+          ]
+        );
       } catch (e) {
         console.warn('Falha ao registrar pagamento Stripe:', e?.message || e);
       }
@@ -197,7 +250,10 @@ const getMyAds = asyncHandler(async (req, res) => {
     throw new Error('Apenas técnicos podem listar seus anúncios');
   }
   const pool5 = getPool();
-  const rs5 = await pool5.query('SELECT * FROM ads WHERE created_by=$1 ORDER BY created_at DESC', [req.user.id || req.user._id]);
+  const rs5 = await pool5.query(
+    'SELECT * FROM ads WHERE created_by=$1 ORDER BY created_at DESC',
+    [req.userId]
+  );
   return res.status(200).json(rs5.rows);
 });
 
@@ -217,7 +273,7 @@ const updateAd = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Anúncio não encontrado');
   }
-  if (String((ad.createdBy || ad.created_by)) !== String(req.user._id || req.user.id)) {
+  if (String(ad.createdBy || ad.created_by) !== String(req.userId)) {
     res.status(403);
     throw new Error('Você não tem permissão para editar este anúncio');
   }
@@ -231,7 +287,7 @@ const updateAd = asyncHandler(async (req, res) => {
     audience: 'audience',
     startDate: 'start_date',
     endDate: 'end_date',
-    active: 'active'
+    active: 'active',
   };
 
   const sets = [];
@@ -248,7 +304,9 @@ const updateAd = asyncHandler(async (req, res) => {
   });
 
   if (sets.length === 0) {
-    return res.status(400).json({ message: 'Nenhum campo válido para atualizar' });
+    return res
+      .status(400)
+      .json({ message: 'Nenhum campo válido para atualizar' });
   }
 
   values.push(id); // ID sempre por último

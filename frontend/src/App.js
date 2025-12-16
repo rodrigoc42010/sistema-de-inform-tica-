@@ -22,6 +22,11 @@ import Settings from './pages/Settings';
 import Payments from './pages/Payments';
 import Attachments from './pages/Attachments';
 import LocalServices from './pages/LocalServices';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminTechnicians from './pages/admin/AdminTechnicians';
+import AdminTickets from './pages/admin/AdminTickets';
+import AdminLayout from './layouts/AdminLayout';
 
 // Componentes
 import PrivateRoute from './components/PrivateRoute';
@@ -54,7 +59,7 @@ function App() {
           </Route>
           
           {/* Rotas privadas - Técnico */}
-          <Route path="/technician" element={<PrivateRoute role="technician" />}>
+          <Route path="/technician" element={<PrivateRoute role="technician" />}> 
             <Route path="dashboard" element={<TechnicianDashboard />} />
             <Route path="services" element={<TechnicianServices />} />
             <Route path="ads" element={<TechnicianAds />} />
@@ -64,6 +69,14 @@ function App() {
             <Route path="profile" element={<Profile />} />
             <Route path="settings" element={<Settings />} />
             <Route path="payments" element={<Payments />} />
+          </Route>
+          <Route path="/admin" element={<PrivateRoute role="admin" />}> 
+            <Route element={<AdminLayout />}> 
+              <Route index element={<AdminDashboard />} /> 
+              <Route path="users" element={<AdminUsers />} /> 
+              <Route path="technicians" element={<AdminTechnicians />} /> 
+              <Route path="tickets" element={<AdminTickets />} /> 
+            </Route>
           </Route>
           
           {/* Rota 404 */}

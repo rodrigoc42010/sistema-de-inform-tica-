@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
@@ -77,8 +76,6 @@ function NewTicket() {
   });
 
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
 
   // Fetch technicians
   React.useEffect(() => {
@@ -98,9 +95,9 @@ function NewTicket() {
 
         const response = await fetch('/api/users/technicians', {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
         });
 
         if (response.ok) {
@@ -166,21 +163,22 @@ function NewTicket() {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
 
-    const readers = files.map((file) =>
-      new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          resolve({
-            id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            url: reader.result,
-            file,
-          });
-        };
-        reader.readAsDataURL(file);
-      })
+    const readers = files.map(
+      (file) =>
+        new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({
+              id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              url: reader.result,
+              file,
+            });
+          };
+          reader.readAsDataURL(file);
+        })
     );
 
     Promise.all(readers).then((newAttachments) => {
@@ -257,10 +255,10 @@ function NewTicket() {
       const response = await fetch('http://localhost:5001/api/tickets', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(ticketPayload)
+        body: JSON.stringify(ticketPayload),
       });
 
       if (!response.ok) {
@@ -268,8 +266,8 @@ function NewTicket() {
         throw new Error(errorData.message || 'Erro ao criar chamado');
       }
 
-      const createdTicket = await response.json();
-      console.log('Chamado criado:', createdTicket);
+      await response.json();
+      // Ticket created successfully
 
       setLoading(false);
       toast.success('Chamado criado com sucesso!');
@@ -343,8 +341,14 @@ function NewTicket() {
         return (
           <Grid container spacing={3}>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth required error={activeStep === 1 && !ticketData.deviceType}>
-                <InputLabel id="device-type-label">Tipo de Dispositivo *</InputLabel>
+              <FormControl
+                fullWidth
+                required
+                error={activeStep === 1 && !ticketData.deviceType}
+              >
+                <InputLabel id="device-type-label">
+                  Tipo de Dispositivo *
+                </InputLabel>
                 <Select
                   labelId="device-type-label"
                   name="deviceType"
@@ -430,7 +434,9 @@ function NewTicket() {
             {technicianOption === 'manual' && (
               <Grid item xs={12}>
                 <FormControl fullWidth>
-                  <InputLabel id="technician-label">Selecione um Técnico</InputLabel>
+                  <InputLabel id="technician-label">
+                    Selecione um Técnico
+                  </InputLabel>
                   <Select
                     labelId="technician-label"
                     value={selectedTechnician}
@@ -440,7 +446,8 @@ function NewTicket() {
                   >
                     {technicians.map((tech) => (
                       <MenuItem key={tech._id} value={tech._id}>
-                        {tech.name} - {tech.specialties.join(', ')} - {tech.distance} km
+                        {tech.name} - {tech.specialties.join(', ')} -{' '}
+                        {tech.distance} km
                       </MenuItem>
                     ))}
                   </Select>
@@ -451,20 +458,35 @@ function NewTicket() {
             <Grid item xs={12}>
               <Divider sx={{ my: 2 }} />
               <FormControl component="fieldset">
-                <FormLabel component="legend">O técnico precisa buscar o equipamento?</FormLabel>
+                <FormLabel component="legend">
+                  O técnico precisa buscar o equipamento?
+                </FormLabel>
                 <RadioGroup
                   aria-label="pickup-required"
                   name="pickupRequired"
                   value={ticketData.pickupRequired ? 'sim' : 'não'}
                   onChange={handlePickupChange}
                 >
-                  <FormControlLabel value="não" control={<Radio />} label="Não, levarei até o técnico" />
-                  <FormControlLabel value="sim" control={<Radio />} label="Sim, preciso que o técnico busque" />
+                  <FormControlLabel
+                    value="não"
+                    control={<Radio />}
+                    label="Não, levarei até o técnico"
+                  />
+                  <FormControlLabel
+                    value="sim"
+                    control={<Radio />}
+                    label="Sim, preciso que o técnico busque"
+                  />
                 </RadioGroup>
               </FormControl>
               {ticketData.pickupRequired && (
-                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                  Nota: Será aplicada uma taxa de deslocamento que varia de acordo com a distância.
+                <Typography
+                  variant="body2"
+                  color="textSecondary"
+                  sx={{ mt: 1 }}
+                >
+                  Nota: Será aplicada uma taxa de deslocamento que varia de
+                  acordo com a distância.
                 </Typography>
               )}
             </Grid>
@@ -478,7 +500,8 @@ function NewTicket() {
                 Anexos
               </Typography>
               <Typography variant="body2" color="textSecondary" paragraph>
-                Adicione fotos ou vídeos que possam ajudar o técnico a entender melhor o problema.
+                Adicione fotos ou vídeos que possam ajudar o técnico a entender
+                melhor o problema.
               </Typography>
 
               <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
@@ -499,16 +522,10 @@ function NewTicket() {
                     Anexar Arquivos
                   </Button>
                 </label>
-                <Button
-                  variant="outlined"
-                  startIcon={<PhotoCameraIcon />}
-                >
+                <Button variant="outlined" startIcon={<PhotoCameraIcon />}>
                   Tirar Foto
                 </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<VideoCallIcon />}
-                >
+                <Button variant="outlined" startIcon={<VideoCallIcon />}>
                   Gravar Vídeo
                 </Button>
               </Box>
@@ -530,7 +547,12 @@ function NewTicket() {
                             component="img"
                             src={attachment.url}
                             alt={attachment.name}
-                            sx={{ width: '100%', height: 140, objectFit: 'cover', mb: 1 }}
+                            sx={{
+                              width: '100%',
+                              height: 140,
+                              objectFit: 'cover',
+                              mb: 1,
+                            }}
                           />
                         ) : (
                           <Box
@@ -544,10 +566,16 @@ function NewTicket() {
                               mb: 1,
                             }}
                           >
-                            <AttachFileIcon sx={{ fontSize: 48, color: 'text.secondary' }} />
+                            <AttachFileIcon
+                              sx={{ fontSize: 48, color: 'text.secondary' }}
+                            />
                           </Box>
                         )}
-                        <Typography variant="body2" noWrap sx={{ width: '100%' }}>
+                        <Typography
+                          variant="body2"
+                          noWrap
+                          sx={{ width: '100%' }}
+                        >
                           {attachment.name}
                         </Typography>
                         <Typography variant="caption" color="textSecondary">
@@ -566,7 +594,11 @@ function NewTicket() {
                   ))}
                 </Grid>
               ) : (
-                <Typography variant="body2" color="textSecondary" align="center">
+                <Typography
+                  variant="body2"
+                  color="textSecondary"
+                  align="center"
+                >
                   Nenhum anexo adicionado
                 </Typography>
               )}
@@ -586,7 +618,11 @@ function NewTicket() {
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2">Prioridade:</Typography>
                   <Typography variant="body2" paragraph>
-                    {priorityOptions.find((opt) => opt.value === ticketData.priority)?.label}
+                    {
+                      priorityOptions.find(
+                        (opt) => opt.value === ticketData.priority
+                      )?.label
+                    }
                   </Typography>
                 </Grid>
                 <Grid item xs={12}>
@@ -598,7 +634,8 @@ function NewTicket() {
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2">Dispositivo:</Typography>
                   <Typography variant="body2" paragraph>
-                    {ticketData.deviceType} {ticketData.deviceBrand} {ticketData.deviceModel}
+                    {ticketData.deviceType} {ticketData.deviceBrand}{' '}
+                    {ticketData.deviceModel}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -606,13 +643,19 @@ function NewTicket() {
                   <Typography variant="body2" paragraph>
                     {technicianOption === 'auto'
                       ? 'Encontrar automaticamente'
-                      : technicians.find((tech) => tech._id === selectedTechnician)?.name || 'Não selecionado'}
+                      : technicians.find(
+                          (tech) => tech._id === selectedTechnician
+                        )?.name || 'Não selecionado'}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2">Retirada do equipamento:</Typography>
+                  <Typography variant="subtitle2">
+                    Retirada do equipamento:
+                  </Typography>
                   <Typography variant="body2" paragraph>
-                    {ticketData.pickupRequired ? 'Sim, técnico deve buscar' : 'Não, cliente levará até o técnico'}
+                    {ticketData.pickupRequired
+                      ? 'Sim, técnico deve buscar'
+                      : 'Não, cliente levará até o técnico'}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -665,10 +708,14 @@ function NewTicket() {
                 <Button
                   variant="contained"
                   onClick={handleNext}
-                  endIcon={activeStep === steps.length - 1 ? <SendIcon /> : null}
+                  endIcon={
+                    activeStep === steps.length - 1 ? <SendIcon /> : null
+                  }
                   disabled={loading}
                 >
-                  {activeStep === steps.length - 1 ? 'Enviar Chamado' : 'Próximo'}
+                  {activeStep === steps.length - 1
+                    ? 'Enviar Chamado'
+                    : 'Próximo'}
                 </Button>
               </Box>
             </CardContent>

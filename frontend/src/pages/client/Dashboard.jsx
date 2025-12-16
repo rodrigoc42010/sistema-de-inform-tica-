@@ -45,36 +45,30 @@ import {
 // Componentes
 import Sidebar from '../../components/Sidebar';
 import TicketStatusBadge from '../../components/TicketStatusBadge';
-import { getTickets, reset as resetTickets } from '../../features/tickets/ticketSlice';
-import { getNearbyTechnicians, reset as resetTechnicians } from '../../features/technicians/technicianSlice';
+import {
+  getTickets,
+  reset as resetTickets,
+} from '../../features/tickets/ticketSlice';
+import {
+  getNearbyTechnicians,
+  reset as resetTechnicians,
+} from '../../features/technicians/technicianSlice';
 
 function ClientDashboard() {
   const [tabValue, setTabValue] = useState(0);
-  const [showEmailVerificationAlert, setShowEmailVerificationAlert] = useState(false);
+  const [showEmailVerificationAlert, setShowEmailVerificationAlert] =
+    useState(false);
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
   const { user } = useSelector((state) => state.auth);
-  const {
-    tickets,
-    isLoading: isLoadingTickets,
-    isError: isErrorTickets,
-    message: messageTickets
-  } = useSelector((state) => state.tickets);
+  const { tickets, isLoading: isLoadingTickets } = useSelector(
+    (state) => state.tickets
+  );
 
-  const {
-    technicians: nearbyTechnicians,
-    isLoading: isLoadingTechnicians,
-    isError: isErrorTechnicians,
-    message: messageTechnicians
-  } = useSelector((state) => state.technicians);
-
-  useEffect(() => {
-    if (isErrorTickets) {
-      toast.error(messageTickets);
-    }
-  }, [isErrorTickets, messageTickets]);
+  const { technicians: nearbyTechnicians, isLoading: isLoadingTechnicians } =
+    useSelector((state) => state.technicians);
 
   useEffect(() => {
     if (!user?.token) return;
@@ -92,7 +86,7 @@ function ClientDashboard() {
       dispatch(resetTickets());
       dispatch(resetTechnicians());
     };
-  }, [dispatch, user?.token]);
+  }, [dispatch, user?.token, user]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -112,18 +106,32 @@ function ClientDashboard() {
   const [reportRows, setReportRows] = useState([]);
   const generateReport = async () => {
     try {
-      const token = user?.token; if (!token) return;
+      const token = user?.token;
+      if (!token) return;
       const params = { groupBy };
-      if (from) params.from = from; if (to) params.to = to;
-      const resp = await fetch('/api/tickets/report/summary?' + new URLSearchParams(params).toString(), { headers: { Authorization: `Bearer ${token}` } });
+      if (from) params.from = from;
+      if (to) params.to = to;
+      const resp = await fetch(
+        '/api/tickets/report/summary?' + new URLSearchParams(params).toString(),
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       const data = await resp.json();
       setReportRows(data?.rows || []);
-    } catch { setReportRows([]); }
+    } catch {
+      setReportRows([]);
+    }
   };
 
   if (isLoadingTickets || isLoadingTechnicians) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -161,11 +169,11 @@ function ClientDashboard() {
       return tickets;
     }
     if (status === 'ativos') {
-      return tickets.filter(ticket =>
+      return tickets.filter((ticket) =>
         ['novo', 'em_andamento', 'aguardando_aprovação'].includes(ticket.status)
       );
     }
-    return tickets.filter(ticket => ticket.status === status);
+    return tickets.filter((ticket) => ticket.status === status);
   };
 
   const getTabContent = () => {
@@ -217,7 +225,12 @@ function ClientDashboard() {
           <Grid item xs={12} md={6} key={ticket._id}>
             <Card className="ticket-card">
               <CardContent>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={1}
+                >
                   <Typography variant="h6" component="h2" noWrap>
                     {ticket.title}
                   </Typography>
@@ -226,7 +239,8 @@ function ClientDashboard() {
 
                 <Typography variant="body2" color="textSecondary" gutterBottom>
                   {new Date(ticket.created_at).toLocaleDateString('pt-BR')} •
-                  {ticket.priority && `Prioridade: ${ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}`}
+                  {ticket.priority &&
+                    `Prioridade: ${ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}`}
                 </Typography>
 
                 <Typography variant="body2" sx={{ mb: 1.5 }} noWrap>
@@ -255,35 +269,65 @@ function ClientDashboard() {
                   </Box>
                 )}
 
-                {ticket.status === 'aguardando_aprovação' && ticket.serviceItems && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" color="textSecondary">
-                      Serviços propostos:
-                    </Typography>
-                    {ticket.serviceItems.map((item, index) => (
-                      <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                        <Typography variant="body2">{item.description}</Typography>
-                        <Typography variant="body2">R$ {item.price.toFixed(2)}</Typography>
-                      </Box>
-                    ))}
-                    <Typography variant="body2" fontWeight="bold" sx={{ mt: 1, textAlign: 'right' }}>
-                      Total: R$ {ticket.serviceItems.reduce((sum, item) => sum + item.price, 0).toFixed(2)}
-                    </Typography>
-                  </Box>
-                )}
+                {ticket.status === 'aguardando_aprovação' &&
+                  ticket.serviceItems && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2" color="textSecondary">
+                        Serviços propostos:
+                      </Typography>
+                      {ticket.serviceItems.map((item, index) => (
+                        <Box
+                          key={index}
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            mt: 0.5,
+                          }}
+                        >
+                          <Typography variant="body2">
+                            {item.description}
+                          </Typography>
+                          <Typography variant="body2">
+                            R$ {item.price.toFixed(2)}
+                          </Typography>
+                        </Box>
+                      ))}
+                      <Typography
+                        variant="body2"
+                        fontWeight="bold"
+                        sx={{ mt: 1, textAlign: 'right' }}
+                      >
+                        Total: R${' '}
+                        {ticket.serviceItems
+                          .reduce((sum, item) => sum + item.price, 0)
+                          .toFixed(2)}
+                      </Typography>
+                    </Box>
+                  )}
               </CardContent>
 
               <CardActions>
-                <Button size="small" onClick={() => handleViewTicket(ticket._id)}>
+                <Button
+                  size="small"
+                  onClick={() => handleViewTicket(ticket._id)}
+                >
                   Ver Detalhes
                 </Button>
 
                 {ticket.status === 'aguardando_aprovação' && (
                   <>
-                    <Button size="small" color="primary" onClick={() => handleApproveFromList(ticket._id)}>
+                    <Button
+                      size="small"
+                      color="primary"
+                      onClick={() => handleApproveFromList(ticket._id)}
+                    >
                       Aprovar
                     </Button>
-                    <Button size="small" color="error" onClick={() => handleRejectFromList(ticket._id)}>
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => handleRejectFromList(ticket._id)}
+                    >
                       Recusar
                     </Button>
                   </>
@@ -325,24 +369,38 @@ function ClientDashboard() {
                   {technician.name}
                 </Typography>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2 }}>
+                <Box
+                  sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2 }}
+                >
                   <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
                     <LocationOnIcon fontSize="small" color="primary" />
-                    <Typography variant="body2" color="textSecondary" sx={{ ml: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      color="textSecondary"
+                      sx={{ ml: 0.5 }}
+                    >
                       {technician.distance} km
                     </Typography>
                   </Box>
 
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <StarIcon sx={{ fontSize: 18, color: 'gold' }} />
-                    <Typography variant="body2" color="textSecondary" sx={{ ml: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      color="textSecondary"
+                      sx={{ ml: 0.5 }}
+                    >
                       {technician.rating}
                     </Typography>
                   </Box>
                 </Box>
 
                 <Box sx={{ mb: 1.5 }}>
-                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <Typography
+                    variant="body2"
+                    color="textSecondary"
+                    gutterBottom
+                  >
                     Especialidades:
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -358,9 +416,18 @@ function ClientDashboard() {
                   Serviços oferecidos:
                 </Typography>
                 {technician.services.map((service, index) => (
-                  <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                  <Box
+                    key={index}
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      mt: 0.5,
+                    }}
+                  >
                     <Typography variant="body2">{service.name}</Typography>
-                    <Typography variant="body2">A partir de R$ {service.initialPrice.toFixed(2)}</Typography>
+                    <Typography variant="body2">
+                      A partir de R$ {service.initialPrice.toFixed(2)}
+                    </Typography>
                   </Box>
                 ))}
               </CardContent>
@@ -396,7 +463,10 @@ function ClientDashboard() {
           minHeight: '100vh',
         }}
       >
-        <Container maxWidth={false} sx={{ maxWidth: '100%', px: { xs: 1, md: 2, lg: 3 } }}>
+        <Container
+          maxWidth={false}
+          sx={{ maxWidth: '100%', px: { xs: 1, md: 2, lg: 3 } }}
+        >
           {/* Alerta de verificação de e-mail */}
           {showEmailVerificationAlert && (
             <Alert
@@ -405,20 +475,25 @@ function ClientDashboard() {
               onClose={() => setShowEmailVerificationAlert(false)}
             >
               <AlertTitle>E-mail não verificado</AlertTitle>
-              Seu e-mail ainda não foi verificado. Verifique sua caixa de entrada e clique no link de confirmação para ativar sua conta completamente.
+              Seu e-mail ainda não foi verificado. Verifique sua caixa de
+              entrada e clique no link de confirmação para ativar sua conta
+              completamente.
               <Button
                 size="small"
                 sx={{ ml: 2 }}
                 onClick={async () => {
                   try {
                     const token = localStorage.getItem('token');
-                    const response = await fetch('/api/users/resend-verification', {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                      },
-                    });
+                    const response = await fetch(
+                      '/api/users/resend-verification',
+                      {
+                        method: 'POST',
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          'Content-Type': 'application/json',
+                        },
+                      }
+                    );
 
                     if (response.ok) {
                       toast.success('E-mail de verificação reenviado!');
@@ -435,15 +510,31 @@ function ClientDashboard() {
             </Alert>
           )}
 
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mb: 3,
+            }}
+          >
             <Typography variant="h4" component="h1">
               Painel do Cliente
             </Typography>
             <Box>
-              <IconButton onClick={handleRefresh} disabled={isLoadingTickets || isLoadingTechnicians}>
+              <IconButton
+                onClick={handleRefresh}
+                disabled={isLoadingTickets || isLoadingTechnicians}
+              >
                 <RefreshIcon />
               </IconButton>
-              <Button variant="outlined" sx={{ ml: 1 }} onClick={() => setOpenReport(true)}>Relatório</Button>
+              <Button
+                variant="outlined"
+                sx={{ ml: 1 }}
+                onClick={() => setOpenReport(true)}
+              >
+                Relatório
+              </Button>
               <Button
                 variant="contained"
                 color="primary"
@@ -456,7 +547,10 @@ function ClientDashboard() {
             </Box>
           </Box>
 
-          <Paper sx={{ mb: 3, borderRadius: 3, p: { xs: 1, md: 2 } }} elevation={2}>
+          <Paper
+            sx={{ mb: 3, borderRadius: 3, p: { xs: 1, md: 2 } }}
+            elevation={2}
+          >
             <Tabs
               value={tabValue}
               onChange={handleTabChange}
@@ -474,22 +568,47 @@ function ClientDashboard() {
           {getTabContent()}
         </Container>
       </Box>
-      <Dialog open={openReport} onClose={() => setOpenReport(false)} maxWidth="md" fullWidth>
+      <Dialog
+        open={openReport}
+        onClose={() => setOpenReport(false)}
+        maxWidth="md"
+        fullWidth
+      >
         <DialogTitle>Relatório de Chamados</DialogTitle>
         <DialogContent>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={4}>
-              <TextField select fullWidth label="Agrupar por" value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
+              <TextField
+                select
+                fullWidth
+                label="Agrupar por"
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value)}
+              >
                 <MenuItem value="day">Dia</MenuItem>
                 <MenuItem value="month">Mês</MenuItem>
                 <MenuItem value="year">Ano</MenuItem>
               </TextField>
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField fullWidth type="date" label="De" InputLabelProps={{ shrink: true }} value={from} onChange={(e) => setFrom(e.target.value)} />
+              <TextField
+                fullWidth
+                type="date"
+                label="De"
+                InputLabelProps={{ shrink: true }}
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField fullWidth type="date" label="Até" InputLabelProps={{ shrink: true }} value={to} onChange={(e) => setTo(e.target.value)} />
+              <TextField
+                fullWidth
+                type="date"
+                label="Até"
+                InputLabelProps={{ shrink: true }}
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
             </Grid>
           </Grid>
           <TableContainer sx={{ mt: 2 }}>
@@ -506,7 +625,9 @@ function ClientDashboard() {
                   <TableRow key={r.period}>
                     <TableCell>{r.period}</TableCell>
                     <TableCell align="right">{r.count}</TableCell>
-                    <TableCell align="right">{Number(r.total || 0).toFixed(2)}</TableCell>
+                    <TableCell align="right">
+                      {Number(r.total || 0).toFixed(2)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -515,12 +636,28 @@ function ClientDashboard() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenReport(false)}>Fechar</Button>
-          <Button onClick={generateReport} variant="contained">Gerar</Button>
-          <Button onClick={() => {
-            const csv = ['period,count,total'].concat(reportRows.map(r => `${r.period},${r.count},${r.total}`)).join('\n');
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'relatorio-chamados.csv'; a.click(); URL.revokeObjectURL(url);
-          }} startIcon={<RefreshIcon />}>Exportar CSV</Button>
+          <Button onClick={generateReport} variant="contained">
+            Gerar
+          </Button>
+          <Button
+            onClick={() => {
+              const csv = ['period,count,total']
+                .concat(
+                  reportRows.map((r) => `${r.period},${r.count},${r.total}`)
+                )
+                .join('\n');
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'relatorio-chamados.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            startIcon={<RefreshIcon />}
+          >
+            Exportar CSV
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

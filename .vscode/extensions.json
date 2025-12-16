@@ -1,0 +1,35 @@
+{
+    "recommendations": [
+        // JavaScript/Node.js
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "christian-kohler.npm-intellisense",
+        // React/Frontend
+        "dsznajder.es7-react-js-snippets",
+        "formulahendry.auto-rename-tag",
+        "bradlc.vscode-tailwindcss",
+        // Database
+        "ms-mssql.mssql",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        // Git
+        "eamodio.gitlens",
+        "donjayamanne.githistory",
+        // Markdown
+        "DavidAnson.vscode-markdownlint",
+        "yzhang.markdown-all-in-one",
+        // Debugging
+        "firefox-devtools.vscode-firefox-debug",
+        "ms-vscode.vscode-edge-devtools",
+        // Utilities
+        "streetsidesoftware.code-spell-checker",
+        "wayou.vscode-todo-highlight",
+        "aaron-bond.better-comments",
+        "PKief.material-icon-theme",
+        "zhuangtongfa.material-theme",
+        // Docker (se usar)
+        "ms-azuretools.vscode-docker",
+        // REST Client
+        "humao.rest-client"
+    ]
+}

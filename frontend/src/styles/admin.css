@@ -1,0 +1,4 @@
+.admin-layout { display: flex; }
+.admin-sidebar { width: 220px; background: #1e1e1e; color: white; padding: 20px; }
+.admin-sidebar a { display: block; color: white; margin: 10px 0; }
+.admin-content { padding: 20px; flex: 1; }

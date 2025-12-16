@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const { getPool } = require('../db/pgClient');
-const isDemo = process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
+const isDemo =
+  process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const allowMulti = process.env.ALLOW_MULTI_SESSION === 'true';
 
 const protect = asyncHandler(async (req, res, next) => {
@@ -25,7 +26,10 @@ const protect = asyncHandler(async (req, res, next) => {
           throw new Error('Não autorizado, token inválido');
         }
         const pool = getPool();
-        const rs = await pool.query('SELECT jti FROM blacklisted_tokens WHERE jti=$1 LIMIT 1', [decoded.jti]);
+        const rs = await pool.query(
+          'SELECT jti FROM blacklisted_tokens WHERE jti=$1 LIMIT 1',
+          [decoded.jti]
+        );
         if (rs.rowCount) {
           res.status(401);
           throw new Error('Não autorizado, token revogado');
@@ -39,20 +43,33 @@ const protect = asyncHandler(async (req, res, next) => {
         req.user = { _id: decoded.id, role: 'client' };
       } else {
         const pool = getPool();
-        const rs = await pool.query('SELECT id,name,email,role,phone,cpf_cnpj,address,bank_info,password_changed_at FROM users WHERE id=$1 LIMIT 1', [decoded.id]);
+        const rs = await pool.query(
+          'SELECT id,name,email,role,phone,cpf_cnpj,address,bank_info,password_changed_at FROM users WHERE id=$1 LIMIT 1',
+          [decoded.id]
+        );
         if (!rs.rowCount) {
           res.status(401);
           throw new Error('Não autorizado, usuário não encontrado');
         }
         let userRow = rs.rows[0];
         try {
-          const rtech = await pool.query('SELECT 1 FROM technicians WHERE user_id=$1 LIMIT 1', [userRow.id]);
+          const rtech = await pool.query(
+            'SELECT 1 FROM technicians WHERE user_id=$1 LIMIT 1',
+            [userRow.id]
+          );
           if (rtech.rowCount && userRow.role !== 'technician') {
-            await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', userRow.id]);
+            await pool.query('UPDATE users SET role=$1 WHERE id=$2', [
+              'technician',
+              userRow.id,
+            ]);
             userRow = { ...userRow, role: 'technician' };
           }
         } catch {}
-        if (!allowMulti && userRow.current_jti && userRow.current_jti !== decoded.jti) {
+        if (
+          !allowMulti &&
+          userRow.current_jti &&
+          userRow.current_jti !== decoded.jti
+        ) {
           res.status(401);
           throw new Error('Sessão inválida');
         }
@@ -61,15 +78,17 @@ const protect = asyncHandler(async (req, res, next) => {
 
       // Invalidar tokens emitidos antes de alteração de senha
       if (!isDemo) {
-        const changedAt = req.user.passwordChangedAt || req.user.password_changed_at;
-        if (
-          changedAt &&
-          decoded.iat * 1000 < new Date(changedAt).getTime()
-        ) {
+        const changedAt =
+          req.user.passwordChangedAt || req.user.password_changed_at;
+        if (changedAt && decoded.iat * 1000 < new Date(changedAt).getTime()) {
           res.status(401);
           throw new Error('Não autorizado, credenciais expiradas');
         }
       }
+
+      // Normalizar dados do usuário (compatibilidade com normalizeUser)
+      req.userId = req.user.id || req.user._id;
+      req.userRole = req.user.role;
 
       next();
     } catch (error) {

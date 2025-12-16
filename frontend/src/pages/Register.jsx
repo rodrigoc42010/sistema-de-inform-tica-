@@ -4,7 +4,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { register, reset } from '../features/auth/authSlice';
 import axios from '../api/axios';
-import { setUser } from '../features/auth/authSlice';
 
 // Material UI
 import {
@@ -46,12 +45,19 @@ import {
   LocationOn as LocationOnIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-  Build as BuildIcon,
   AttachMoney as AttachMoneyIcon,
 } from '@mui/icons-material';
 
 // Logo
 import logo from '../assets/logo.svg';
+import {
+  isValidPhoneBR,
+  isValidCpfOrCnpj,
+  formatCPF,
+  formatCNPJ,
+  formatPhoneBR,
+  formatCEP,
+} from '../utils/validators';
 
 // Lista de serviços disponíveis para técnicos
 const availableServices = [
@@ -91,12 +97,14 @@ const availableServices = [
 function Register() {
   const [activeStep, setActiveStep] = useState(0);
   const [userType, setUserType] = useState('client');
+  const [lockedUserType, setLockedUserType] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [termsScrolled, setTermsScrolled] = useState(false);
   const [termsAgreeChecked, setTermsAgreeChecked] = useState(false);
+  const [docType, setDocType] = useState('cpf');
 
   // Dados básicos (etapa 1)
   const [basicData, setBasicData] = useState({
@@ -142,7 +150,12 @@ function Register() {
       setTimeout(() => dispatch(reset()), 50);
     }
 
-    if (isSuccess && user && message && message.includes('Verifique seu e-mail')) {
+    if (
+      isSuccess &&
+      user &&
+      message &&
+      message.includes('Verifique seu e-mail')
+    ) {
       toast.success(message, { autoClose: 8000 });
     }
   }, [user, isError, isSuccess, message, navigate, dispatch]);
@@ -153,6 +166,7 @@ function Register() {
       if (!validateBasicData()) {
         return;
       }
+      if (!lockedUserType) setLockedUserType(userType);
     } else if (activeStep === 1) {
       if (!validateAddressData()) {
         return;
@@ -167,7 +181,14 @@ function Register() {
   };
 
   const validateBasicData = () => {
-    if (!basicData.name || !basicData.email || !basicData.password || !basicData.confirmPassword || !basicData.phone || !basicData.cpfCnpj) {
+    if (
+      !basicData.name ||
+      !basicData.email ||
+      !basicData.password ||
+      !basicData.confirmPassword ||
+      !basicData.phone ||
+      !basicData.cpfCnpj
+    ) {
       toast.error('Por favor, preencha todos os campos obrigatórios');
       return false;
     }
@@ -182,12 +203,30 @@ function Register() {
       return false;
     }
 
+    if (!isValidPhoneBR(basicData.phone)) {
+      toast.error('Telefone inválido. Informe DDD + número');
+      return false;
+    }
+
+    if (!isValidCpfOrCnpj(basicData.cpfCnpj)) {
+      toast.error('CPF/CNPJ inválido');
+      return false;
+    }
+
     return true;
   };
 
   const validateAddressData = () => {
-    if (!addressData.street || !addressData.city || !addressData.state || !addressData.country || !addressData.zipCode) {
-      toast.error('Por favor, preencha todos os campos obrigatórios de endereço');
+    if (
+      !addressData.street ||
+      !addressData.city ||
+      !addressData.state ||
+      !addressData.country ||
+      !addressData.zipCode
+    ) {
+      toast.error(
+        'Por favor, preencha todos os campos obrigatórios de endereço'
+      );
       return false;
     }
 
@@ -195,27 +234,37 @@ function Register() {
   };
 
   const handleUserTypeChange = (event, newValue) => {
-    setUserType(newValue);
+    if (activeStep === 0) setUserType(newValue);
+    if (newValue === 'client') setDocType('cpf');
   };
 
   const handleBasicDataChange = (e) => {
-    setBasicData({
-      ...basicData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    if (name === 'cpfCnpj') {
+      const masked = docType === 'cnpj' ? formatCNPJ(value) : formatCPF(value);
+      setBasicData({ ...basicData, cpfCnpj: masked });
+      return;
+    }
+    if (name === 'phone') {
+      setBasicData({ ...basicData, phone: formatPhoneBR(value) });
+      return;
+    }
+    setBasicData({ ...basicData, [name]: value });
   };
 
   const handleAddressDataChange = (e) => {
-    setAddressData({
-      ...addressData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    if (name === 'zipCode') {
+      setAddressData({ ...addressData, zipCode: formatCEP(value) });
+      return;
+    }
+    setAddressData({ ...addressData, [name]: value });
   };
 
   // Auto-preencher endereço pelo CEP (BR): quando o CEP tiver 8 dígitos, buscar no ViaCEP
   useEffect(() => {
-    const rawCep = (addressData.zipCode || '').replace(/\D/g, '');
-    if (rawCep.length === 8) {
+    const rawCep = (addressData.zipCode || '').replace(/\D/g, '').slice(0, 8);
+    if (rawCep.length >= 8) {
       (async () => {
         try {
           const resp = await fetch(`/api/cep/${rawCep}`);
@@ -242,23 +291,26 @@ function Register() {
     if (name === 'services') {
       // Tratamento especial para serviços selecionados
       const serviceId = parseInt(value);
-      const service = availableServices.find(s => s.id === serviceId);
+      const service = availableServices.find((s) => s.id === serviceId);
 
       if (checked) {
         // Adicionar serviço
         setTechnicianData({
           ...technicianData,
-          services: [...technicianData.services, {
-            id: service.id,
-            name: service.name,
-            initialPrice: service.defaultPrice
-          }]
+          services: [
+            ...technicianData.services,
+            {
+              id: service.id,
+              name: service.name,
+              initialPrice: service.defaultPrice,
+            },
+          ],
         });
       } else {
         // Remover serviço
         setTechnicianData({
           ...technicianData,
-          services: technicianData.services.filter(s => s.id !== serviceId)
+          services: technicianData.services.filter((s) => s.id !== serviceId),
         });
       }
     } else if (name === 'paymentMethods') {
@@ -266,23 +318,25 @@ function Register() {
       if (checked) {
         setTechnicianData({
           ...technicianData,
-          paymentMethods: [...technicianData.paymentMethods, value]
+          paymentMethods: [...technicianData.paymentMethods, value],
         });
       } else {
         setTechnicianData({
           ...technicianData,
-          paymentMethods: technicianData.paymentMethods.filter(method => method !== value)
+          paymentMethods: technicianData.paymentMethods.filter(
+            (method) => method !== value
+          ),
         });
       }
     } else if (type === 'checkbox') {
       setTechnicianData({
         ...technicianData,
-        [name]: checked
+        [name]: checked,
       });
     } else {
       setTechnicianData({
         ...technicianData,
-        [name]: value
+        [name]: value,
       });
     }
   };
@@ -290,9 +344,9 @@ function Register() {
   const handleServicePriceChange = (serviceId, price) => {
     setTechnicianData({
       ...technicianData,
-      services: technicianData.services.map(service =>
+      services: technicianData.services.map((service) =>
         service.id === serviceId ? { ...service, initialPrice: price } : service
-      )
+      ),
     });
   };
 
@@ -300,17 +354,20 @@ function Register() {
     e.preventDefault();
 
     if (!termsAccepted) {
-      toast.error('Você precisa aceitar os Termos de Uso e a Política de Privacidade');
+      toast.error(
+        'Você precisa aceitar os Termos de Uso e a Política de Privacidade'
+      );
       setTermsOpen(true);
       return;
     }
 
     // Preparar dados para envio
+    const finalRole = lockedUserType || userType;
     const userData = {
       name: basicData.name,
       email: basicData.email,
       password: basicData.password,
-      role: userType,
+      role: finalRole,
       phone: basicData.phone,
       cpfCnpj: basicData.cpfCnpj,
       address: addressData,
@@ -318,11 +375,11 @@ function Register() {
     };
 
     // Adicionar dados específicos para técnicos
-    if (userType === 'technician') {
+    if (finalRole === 'technician') {
       userData.technician = technicianData;
     }
 
-    console.log('Submitting register payload', userData);
+    // Submit registration
     dispatch(register(userData))
       .unwrap()
       .then(async (u) => {
@@ -330,24 +387,42 @@ function Register() {
           const token = u?.token || localStorage.getItem('token');
           if (token && userType === 'technician') {
             try {
-              await axios.post('/api/users/upgrade-to-technician', { technician: technicianData }, { headers: { Authorization: `Bearer ${token}` } });
+              await axios.post(
+                '/api/users/upgrade-to-technician',
+                { technician: technicianData },
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
             } catch (e) {}
           }
           if (token) {
             try {
-              const me = await axios.get('/api/users/me', { headers: { Authorization: `Bearer ${token}` } });
+              const me = await axios.get('/api/users/me', {
+                headers: { Authorization: `Bearer ${token}` },
+              });
               const role = me?.data?.role || u?.role || userType;
-              navigate(role === 'technician' ? '/technician/dashboard' : '/client/dashboard');
+              navigate(
+                role === 'technician'
+                  ? '/technician/dashboard'
+                  : '/client/dashboard'
+              );
               return;
             } catch {}
           }
-          navigate((u?.role || userType) === 'technician' ? '/technician/dashboard' : '/client/dashboard');
+          navigate(
+            (u?.role || userType) === 'technician'
+              ? '/technician/dashboard'
+              : '/client/dashboard'
+          );
         } catch (err) {
-          toast.error(typeof err === 'string' ? err : (err?.message || 'Falha ao registrar'));
+          toast.error(
+            typeof err === 'string' ? err : err?.message || 'Falha ao registrar'
+          );
         }
       })
       .catch((err) => {
-        toast.error(typeof err === 'string' ? err : (err?.message || 'Falha ao registrar'));
+        toast.error(
+          typeof err === 'string' ? err : err?.message || 'Falha ao registrar'
+        );
       });
   };
 
@@ -360,7 +435,12 @@ function Register() {
   };
 
   // Etapas do registro
-  const steps = ['Informações Básicas', 'Endereço', userType === 'technician' ? 'Serviços Oferecidos' : 'Confirmação'];
+  const effectiveRole = lockedUserType || userType;
+  const steps = [
+    'Informações Básicas',
+    'Endereço',
+    effectiveRole === 'technician' ? 'Serviços Oferecidos' : 'Confirmação',
+  ];
 
   useEffect(() => {
     if (activeStep === steps.length - 1) {
@@ -396,8 +476,21 @@ function Register() {
               variant="fullWidth"
               className="auth-tabs"
             >
-              <Tab value="client" label="Cliente" />
-              <Tab value="technician" label="Técnico" />
+              <Tab
+                value="client"
+                label="Cliente"
+                disabled={
+                  activeStep > 0 && (lockedUserType || userType) !== 'client'
+                }
+              />
+              <Tab
+                value="technician"
+                label="Técnico"
+                disabled={
+                  activeStep > 0 &&
+                  (lockedUserType || userType) !== 'technician'
+                }
+              />
             </Tabs>
 
             <Box sx={{ width: '100%', mt: 4 }}>
@@ -469,7 +562,11 @@ function Register() {
                                 onClick={toggleShowPassword}
                                 edge="end"
                               >
-                                {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                                {showPassword ? (
+                                  <VisibilityOffIcon />
+                                ) : (
+                                  <VisibilityIcon />
+                                )}
                               </IconButton>
                             </InputAdornment>
                           ),
@@ -497,7 +594,11 @@ function Register() {
                                 onClick={toggleShowConfirmPassword}
                                 edge="end"
                               >
-                                {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                                {showConfirmPassword ? (
+                                  <VisibilityOffIcon />
+                                ) : (
+                                  <VisibilityIcon />
+                                )}
                               </IconButton>
                             </InputAdornment>
                           ),
@@ -521,15 +622,32 @@ function Register() {
                         }}
                       />
                     </Grid>
-                    <Grid item xs={12}>
+                    <Grid item xs={12} sm={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Tipo de Documento</InputLabel>
+                        <Select
+                          value={docType}
+                          label="Tipo de Documento"
+                          onChange={(e) => setDocType(e.target.value)}
+                        >
+                          <MenuItem value="cpf">CPF</MenuItem>
+                          <MenuItem value="cnpj">CNPJ</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={8}>
                       <TextField
                         name="cpfCnpj"
-                        label={userType === 'client' ? 'CPF' : 'CNPJ ou CPF'}
+                        label={docType === 'cnpj' ? 'CNPJ' : 'CPF'}
                         value={basicData.cpfCnpj}
                         onChange={handleBasicDataChange}
                         fullWidth
                         required
-                        placeholder={userType === 'client' ? '000.000.000-00' : '00.000.000/0000-00 ou 000.000.000-00'}
+                        placeholder={
+                          docType === 'cnpj'
+                            ? '00.000.000/0000-00'
+                            : '000.000.000-00'
+                        }
                         InputProps={{
                           startAdornment: (
                             <InputAdornment position="start">
@@ -537,7 +655,11 @@ function Register() {
                             </InputAdornment>
                           ),
                         }}
-                        helperText={userType === 'technician' ? 'Se não tiver CNPJ, informe seu CPF' : ''}
+                        helperText={
+                          userType === 'technician'
+                            ? 'Se não tiver CNPJ, informe seu CPF'
+                            : ''
+                        }
                       />
                     </Grid>
                   </Grid>
@@ -643,7 +765,12 @@ function Register() {
                       </Typography>
                       <FormGroup>
                         {availableServices.map((service) => (
-                          <Grid container spacing={2} key={service.id} alignItems="center">
+                          <Grid
+                            container
+                            spacing={2}
+                            key={service.id}
+                            alignItems="center"
+                          >
                             <Grid item xs={8}>
                               <FormControlLabel
                                 control={
@@ -651,19 +778,32 @@ function Register() {
                                     name="services"
                                     value={service.id}
                                     onChange={handleTechnicianDataChange}
-                                    checked={technicianData.services.some(s => s.id === service.id)}
+                                    checked={technicianData.services.some(
+                                      (s) => s.id === service.id
+                                    )}
                                   />
                                 }
                                 label={service.name}
                               />
                             </Grid>
-                            {technicianData.services.some(s => s.id === service.id) && (
+                            {technicianData.services.some(
+                              (s) => s.id === service.id
+                            ) && (
                               <Grid item xs={4}>
                                 <TextField
                                   type="number"
                                   label="Preço Inicial (R$)"
-                                  value={technicianData.services.find(s => s.id === service.id).initialPrice}
-                                  onChange={(e) => handleServicePriceChange(service.id, e.target.value)}
+                                  value={
+                                    technicianData.services.find(
+                                      (s) => s.id === service.id
+                                    ).initialPrice
+                                  }
+                                  onChange={(e) =>
+                                    handleServicePriceChange(
+                                      service.id,
+                                      e.target.value
+                                    )
+                                  }
                                   fullWidth
                                   InputProps={{
                                     startAdornment: (
@@ -731,14 +871,18 @@ function Register() {
 
                     <Grid item xs={12}>
                       <FormControl component="fieldset">
-                        <FormLabel component="legend">Métodos de Pagamento Aceitos</FormLabel>
+                        <FormLabel component="legend">
+                          Métodos de Pagamento Aceitos
+                        </FormLabel>
                         <FormGroup row>
                           <FormControlLabel
                             control={
                               <Checkbox
                                 name="paymentMethods"
                                 value="Dinheiro"
-                                checked={technicianData.paymentMethods.includes('Dinheiro')}
+                                checked={technicianData.paymentMethods.includes(
+                                  'Dinheiro'
+                                )}
                                 onChange={handleTechnicianDataChange}
                               />
                             }
@@ -749,7 +893,9 @@ function Register() {
                               <Checkbox
                                 name="paymentMethods"
                                 value="Cartão de Crédito"
-                                checked={technicianData.paymentMethods.includes('Cartão de Crédito')}
+                                checked={technicianData.paymentMethods.includes(
+                                  'Cartão de Crédito'
+                                )}
                                 onChange={handleTechnicianDataChange}
                               />
                             }
@@ -760,7 +906,9 @@ function Register() {
                               <Checkbox
                                 name="paymentMethods"
                                 value="Cartão de Débito"
-                                checked={technicianData.paymentMethods.includes('Cartão de Débito')}
+                                checked={technicianData.paymentMethods.includes(
+                                  'Cartão de Débito'
+                                )}
                                 onChange={handleTechnicianDataChange}
                               />
                             }
@@ -771,7 +919,9 @@ function Register() {
                               <Checkbox
                                 name="paymentMethods"
                                 value="Pix"
-                                checked={technicianData.paymentMethods.includes('Pix')}
+                                checked={technicianData.paymentMethods.includes(
+                                  'Pix'
+                                )}
                                 onChange={handleTechnicianDataChange}
                               />
                             }
@@ -782,7 +932,9 @@ function Register() {
                               <Checkbox
                                 name="paymentMethods"
                                 value="Transferência Bancária"
-                                checked={technicianData.paymentMethods.includes('Transferência Bancária')}
+                                checked={technicianData.paymentMethods.includes(
+                                  'Transferência Bancária'
+                                )}
                                 onChange={handleTechnicianDataChange}
                               />
                             }
@@ -801,14 +953,33 @@ function Register() {
                       Confirme seus dados para finalizar o registro
                     </Typography>
                     <Typography variant="body1">
-                      Ao clicar em "Registrar", você concorda com nossos Termos de Uso e Política de Privacidade.
+                      Ao clicar em "Registrar", você concorda com nossos Termos
+                      de Uso e Política de Privacidade.
                     </Typography>
-                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                    <Box
+                      sx={{
+                        mt: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 2,
+                      }}
+                    >
                       <FormControlLabel
-                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
+                        control={
+                          <Checkbox
+                            checked={termsAccepted}
+                            onChange={(e) => setTermsAccepted(e.target.checked)}
+                          />
+                        }
                         label="Li e concordo com os Termos de Uso e a Política de Privacidade"
                       />
-                      <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
+                      <Button
+                        variant="outlined"
+                        onClick={() => setTermsOpen(true)}
+                      >
+                        Ler termos
+                      </Button>
                     </Box>
                   </Box>
                 )}
@@ -816,23 +987,45 @@ function Register() {
                 {activeStep === 2 && userType === 'technician' && (
                   <Box sx={{ mt: 2 }}>
                     <Typography variant="body1" align="center">
-                      Ao clicar em "Registrar", você concorda com nossos Termos de Uso e Política de Privacidade.
+                      Ao clicar em "Registrar", você concorda com nossos Termos
+                      de Uso e Política de Privacidade.
                     </Typography>
-                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                    <Box
+                      sx={{
+                        mt: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 2,
+                      }}
+                    >
                       <FormControlLabel
-                        control={<Checkbox checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />}
+                        control={
+                          <Checkbox
+                            checked={termsAccepted}
+                            onChange={(e) => setTermsAccepted(e.target.checked)}
+                          />
+                        }
                         label="Li e concordo com os Termos de Uso e a Política de Privacidade"
                       />
-                      <Button variant="outlined" onClick={() => setTermsOpen(true)}>Ler termos</Button>
+                      <Button
+                        variant="outlined"
+                        onClick={() => setTermsOpen(true)}
+                      >
+                        Ler termos
+                      </Button>
                     </Box>
                   </Box>
                 )}
 
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-                  <Button
-                    disabled={activeStep === 0}
-                    onClick={handleBack}
-                  >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    mt: 4,
+                  }}
+                >
+                  <Button disabled={activeStep === 0} onClick={handleBack}>
                     Voltar
                   </Button>
                   <Box>
@@ -873,13 +1066,19 @@ function Register() {
         </Card>
       </Container>
 
-      <Dialog open={termsOpen} onClose={() => setTermsOpen(false)} maxWidth="md" fullWidth>
+      <Dialog
+        open={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
         <DialogTitle>Termos de Uso e Política de Privacidade</DialogTitle>
         <DialogContent
           dividers
           onScroll={(e) => {
             const el = e.currentTarget;
-            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+            const atBottom =
+              el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
             if (atBottom) setTermsScrolled(true);
           }}
         >
@@ -887,60 +1086,98 @@ function Register() {
             Última atualização: 2025
           </Typography>
           <Typography variant="body1" paragraph>
-            Ao utilizar este sistema, o usuário declara que leu, compreendeu e concorda integralmente com os termos abaixo, bem como com a Política de Privacidade e com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 – LGPD).
+            Ao utilizar este sistema, o usuário declara que leu, compreendeu e
+            concorda integralmente com os termos abaixo, bem como com a Política
+            de Privacidade e com a Lei Geral de Proteção de Dados (Lei nº
+            13.709/2018 – LGPD).
           </Typography>
           <Typography variant="h6">1. Coleta e Uso de Informações</Typography>
           <Typography variant="subtitle1">1.1 Informações Pessoais</Typography>
           <Typography variant="body2" paragraph>
-            Nome completo; CPF ou CNPJ; Endereço, telefone e e-mail; Dados de acesso à conta.
+            Nome completo; CPF ou CNPJ; Endereço, telefone e e-mail; Dados de
+            acesso à conta.
           </Typography>
           <Typography variant="subtitle1">1.2 Informações Técnicas</Typography>
           <Typography variant="body2" paragraph>
-            Dados do dispositivo utilizado; Endereço IP; Logs de acesso e atividade no sistema.
+            Dados do dispositivo utilizado; Endereço IP; Logs de acesso e
+            atividade no sistema.
           </Typography>
           <Typography variant="h6">2. Permissões Necessárias</Typography>
           <Typography variant="subtitle1">2.1 Geolocalização</Typography>
           <Typography variant="body2" paragraph>
-            Utilizada para localizar técnicos próximos, verificar raio de atendimento e registrar localização de chamados (opcional).
+            Utilizada para localizar técnicos próximos, verificar raio de
+            atendimento e registrar localização de chamados (opcional).
           </Typography>
           <Typography variant="subtitle1">2.2 Câmera e Galeria</Typography>
           <Typography variant="body2" paragraph>
-            Utilizada para anexar fotos de problemas técnicos, comprovação de serviço executado e envio de documentos, relatórios ou imagens relacionadas ao atendimento.
+            Utilizada para anexar fotos de problemas técnicos, comprovação de
+            serviço executado e envio de documentos, relatórios ou imagens
+            relacionadas ao atendimento.
           </Typography>
           <Typography variant="subtitle1">2.3 Áudio (opcional)</Typography>
           <Typography variant="body2" paragraph>
-            Utilizado apenas quando o usuário gravar ou enviar áudios relacionados a um chamado ou atendimento.
+            Utilizado apenas quando o usuário gravar ou enviar áudios
+            relacionados a um chamado ou atendimento.
           </Typography>
           <Typography variant="subtitle1">2.4 Anexos</Typography>
           <Typography variant="body2" paragraph>
-            O usuário poderá enviar fotos, vídeos, relatórios técnicos, PDFs, comprovantes de pagamento e registros relacionados ao atendimento. Todos os anexos são armazenados de forma segura, conforme a LGPD.
+            O usuário poderá enviar fotos, vídeos, relatórios técnicos, PDFs,
+            comprovantes de pagamento e registros relacionados ao atendimento.
+            Todos os anexos são armazenados de forma segura, conforme a LGPD.
           </Typography>
-          <Typography variant="h6">3. Compartilhamento de Informações</Typography>
+          <Typography variant="h6">
+            3. Compartilhamento de Informações
+          </Typography>
           <Typography variant="body2" paragraph>
-            Os dados poderão ser compartilhados exclusivamente para fins operacionais do sistema, como envio de informações ao técnico responsável pelo atendimento, notificações ao cliente, processamento de pagamentos e registros, exigências legais de autoridades competentes. O sistema não vende, negocia ou compartilha dados com terceiros para fins comerciais.
+            Os dados poderão ser compartilhados exclusivamente para fins
+            operacionais do sistema, como envio de informações ao técnico
+            responsável pelo atendimento, notificações ao cliente, processamento
+            de pagamentos e registros, exigências legais de autoridades
+            competentes. O sistema não vende, negocia ou compartilha dados com
+            terceiros para fins comerciais.
           </Typography>
           <Typography variant="h6">4. Proteção de Dados</Typography>
           <Typography variant="body2" paragraph>
-            A plataforma segue integralmente os princípios da LGPD: finalidade, necessidade, transparência, segurança, consentimento e direitos do titular (acesso, correção, exclusão, portabilidade e revogação do consentimento).
+            A plataforma segue integralmente os princípios da LGPD: finalidade,
+            necessidade, transparência, segurança, consentimento e direitos do
+            titular (acesso, correção, exclusão, portabilidade e revogação do
+            consentimento).
           </Typography>
           <Typography variant="h6">5. Conduta do Usuário</Typography>
           <Typography variant="body2" paragraph>
-            É proibido enviar arquivos ou informações falsas, tentar invadir, manipular ou prejudicar o sistema, utilizar a plataforma para fins ilegais, criar contas duplicadas para fraudes, fornecer dados incorretos ou de terceiros sem autorização.
+            É proibido enviar arquivos ou informações falsas, tentar invadir,
+            manipular ou prejudicar o sistema, utilizar a plataforma para fins
+            ilegais, criar contas duplicadas para fraudes, fornecer dados
+            incorretos ou de terceiros sem autorização.
           </Typography>
           <Typography variant="h6">6. Penalidades</Typography>
           <Typography variant="body2" paragraph>
-            A violação destes termos ou da LGPD poderá resultar em suspensão temporária, bloqueio de acesso, banimento permanente, comunicação às autoridades competentes e exclusão ou bloqueio de dados, conforme legislação.
+            A violação destes termos ou da LGPD poderá resultar em suspensão
+            temporária, bloqueio de acesso, banimento permanente, comunicação às
+            autoridades competentes e exclusão ou bloqueio de dados, conforme
+            legislação.
           </Typography>
           <Typography variant="h6">7. Consentimento Final</Typography>
           <Typography variant="body2" paragraph>
-            Ao clicar em “Concordo”, o usuário confirma que leu e compreendeu todos os termos, autoriza o uso e tratamento dos dados conforme descrito, está de acordo com a LGPD e assume total responsabilidade pelas informações enviadas.
+            Ao clicar em “Concordo”, o usuário confirma que leu e compreendeu
+            todos os termos, autoriza o uso e tratamento dos dados conforme
+            descrito, está de acordo com a LGPD e assume total responsabilidade
+            pelas informações enviadas.
           </Typography>
           <Box sx={{ mt: 2 }}>
             <FormControlLabel
-              control={<Checkbox checked={termsAgreeChecked} onChange={(e) => setTermsAgreeChecked(e.target.checked)} />}
+              control={
+                <Checkbox
+                  checked={termsAgreeChecked}
+                  onChange={(e) => setTermsAgreeChecked(e.target.checked)}
+                />
+              }
               label="Li e concordo com os Termos de Uso e a Política de Privacidade"
             />
-            <Typography variant="caption" color={termsScrolled ? 'success.main' : 'text.secondary'}>
+            <Typography
+              variant="caption"
+              color={termsScrolled ? 'success.main' : 'text.secondary'}
+            >
               Role até o final para habilitar o botão de concordância.
             </Typography>
           </Box>
@@ -949,7 +1186,12 @@ function Register() {
           <Button onClick={() => setTermsOpen(false)}>Fechar</Button>
           <Button
             variant="contained"
-            onClick={() => { if (termsAgreeChecked && termsScrolled) { setTermsAccepted(true); setTermsOpen(false); } }}
+            onClick={() => {
+              if (termsAgreeChecked && termsScrolled) {
+                setTermsAccepted(true);
+                setTermsOpen(false);
+              }
+            }}
             disabled={!termsAgreeChecked || !termsScrolled}
           >
             Concordo

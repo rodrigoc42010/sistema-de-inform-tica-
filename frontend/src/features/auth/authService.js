@@ -9,10 +9,16 @@ const register = async (userData) => {
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
       }
+      if (response.data.refreshToken) {
+        localStorage.setItem('refreshToken', response.data.refreshToken);
+      }
     }
     return response.data;
   } catch (err) {
-    const message = (err.response && err.response.data && err.response.data.message) || err.message || 'Falha ao registrar';
+    const message =
+      (err.response && err.response.data && err.response.data.message) ||
+      err.message ||
+      'Falha ao registrar';
     throw new Error(message);
   }
 };
@@ -39,6 +45,7 @@ const login = async (userData) => {
       delete payload.email;
     }
   }
+
   const response = await axios.post(`/api/users/${endpoint}`, payload);
 
   if (response.data) {
@@ -47,11 +54,13 @@ const login = async (userData) => {
     if (response.data.token) {
       localStorage.setItem('token', response.data.token);
     }
+    if (response.data.refreshToken) {
+      localStorage.setItem('refreshToken', response.data.refreshToken);
+    }
   }
 
   return response.data;
 };
-
 
 // Logout de usuário
 const logout = async () => {
@@ -60,15 +69,14 @@ const logout = async () => {
     const user = raw ? JSON.parse(raw) : null;
     const token = user?.token || localStorage.getItem('token');
     if (token) {
-      await axios.post('/api/users/logout', {}, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await axios.post('/api/users/logout', {});
     }
   } catch (e) {
-    // Ignorar erros de logout
+    // Ignorar erros (errors) de logout
   } finally {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
   }
 };
 
@@ -79,10 +87,8 @@ const forgotPassword = async (email) => {
 };
 
 // Atualizar perfil
-const updateProfile = async (userData, token) => {
-  const response = await axios.put('/api/users/profile', userData, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+const updateProfile = async (userData) => {
+  const response = await axios.put('/api/users/profile', userData);
   if (response.data) {
     localStorage.setItem('user', JSON.stringify(response.data));
   }

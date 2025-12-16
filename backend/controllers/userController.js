@@ -4,13 +4,41 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const GeocodingService = require('../services/geocodingService');
 const { sendVerificationEmail } = require('../utils/emailService');
-const { logLogin, logFailedLogin, logLogout } = require('../middleware/auditLogger');
+const {
+  logLogin,
+  logFailedLogin,
+  logLogout,
+} = require('../middleware/auditLogger');
 const { getPool } = require('../db/pgClient');
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  storeRefreshToken,
+  revokeRefreshToken,
+  verifyRefreshToken,
+} = require('../utils/tokenUtils');
+// CORREÇÃO CRÍTICA: Validadores centralizados (fonte única de verdade)
+const { isValidPhoneBR, isValidCpfOrCnpj } = require('../utils/validators');
+// CORREÇÃO CRÍTICA: Token service centralizado (elimina 3 funções duplicadas)
+const { generateToken } = require('../utils/tokenService');
+// CORREÇÃO ALTA: User Repository (centraliza queries SQL de usuário)
+const userRepository = require('../repositories/userRepository');
+const {
+  BadRequestError,
+  InternalServerError,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError,
+  LockedError,
+} = require('../utils/httpErrors');
+const userService = require('../services/userService');
 
 // Modo de demonstração (sem banco de dados)
 let demoUsers = [];
 let demoCounter = 1;
-const isDemo = process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
+const isDemo =
+  process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_TIME_MINUTES = 15;
 
@@ -18,25 +46,60 @@ const LOCK_TIME_MINUTES = 15;
 // @route   POST /api/users
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, phone, cpfCnpj, address, technician, termsAccepted } = req.body;
+  const {
+    name,
+    email,
+    password,
+    role,
+    phone,
+    cpfCnpj,
+    address,
+    technician,
+    termsAccepted,
+  } = req.body;
   const normalizeRole = (r, techObj) => {
     if (techObj) return 'technician';
-    const s = String(r || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (['technician', 'tecnico', 'tecnico(a)', 'tecnic', 'tech', 'tecnicx', 'tecnico profissional'].includes(s)) return 'technician';
+    const s = String(r || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (
+      [
+        'technician',
+        'tecnico',
+        'tecnico(a)',
+        'tecnic',
+        'tech',
+        'tecnicx',
+        'tecnico profissional',
+      ].includes(s)
+    )
+      return 'technician';
     if (['client', 'cliente', 'user', 'usuario'].includes(s)) return 'client';
     return 'client';
   };
   const roleNormalized = normalizeRole(role, technician);
 
-  // Validação
+  // CORREÇÃO CRÍTICA: Validações agora importadas de utils/validators.js (fonte única de verdade)
+  // Removidas 48 linhas de código duplicado
+
   if (!name || !email || !password || !phone || !cpfCnpj) {
-    res.status(400);
-    throw new Error('Por favor, preencha todos os campos obrigatórios');
+    throw new BadRequestError(
+      'Por favor, preencha todos os campos obrigatórios'
+    );
   }
 
   if (termsAccepted !== true) {
-    res.status(400);
-    throw new Error('É necessário aceitar os Termos de Uso e a Política de Privacidade');
+    throw new BadRequestError(
+      'É necessário aceitar os Termos de Uso e a Política de Privacidade'
+    );
+  }
+
+  if (!isValidPhoneBR(phone)) {
+    throw new BadRequestError('Telefone inválido');
+  }
+  if (!isValidCpfOrCnpj(cpfCnpj)) {
+    throw new BadRequestError('CPF/CNPJ inválido');
   }
 
   // Fallback de modo demonstração
@@ -45,8 +108,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const userExistsDemo = demoUsers.find((u) => u.email === email);
 
     if (userExistsDemo) {
-      res.status(400);
-      throw new Error('Usuário já cadastrado');
+      throw new BadRequestError('Usuário já cadastrado');
     }
 
     // Hash da senha
@@ -81,7 +143,12 @@ const registerUser = asyncHandler(async (req, res) => {
 
     // Log de pseudo-registro (não envia e-mail em modo demo)
     const token = generateToken(user._id);
-    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 12 * 60 * 60 * 1000,
+    });
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -95,7 +162,7 @@ const registerUser = asyncHandler(async (req, res) => {
       isAdFree: false,
       ...(user.loginId ? { loginId: user.loginId } : {}),
       token,
-      message: 'Usuário registrado com sucesso! (modo demonstração)'
+      message: 'Usuário registrado com sucesso! (modo demonstração)',
     });
     return;
   }
@@ -104,140 +171,58 @@ const registerUser = asyncHandler(async (req, res) => {
     const hasDb = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
     const hasJwt = !!process.env.JWT_SECRET;
 
-    console.log(`[Register] Starting registration for ${email}. DB: ${hasDb}, Demo: ${isDemo}`.cyan);
+    console.log(
+      `[Register] Starting registration for ${email}. DB: ${hasDb}, Demo: ${isDemo}`
+        .cyan
+    );
 
     if (!hasDb) {
-      res.status(500);
-      throw new Error('Configuração ausente: DATABASE_URL/POSTGRES_URL');
+      throw new InternalServerError(
+        'Configuração ausente: DATABASE_URL/POSTGRES_URL'
+      );
     }
     if (!hasJwt) {
-      res.status(500);
-      throw new Error('Configuração ausente: JWT_SECRET');
-    }
-    const pool = getPool();
-
-    // Start transaction
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const exists = await client.query('SELECT id FROM users WHERE email=$1 LIMIT 1', [email]);
-      if (exists.rowCount > 0) {
-        res.status(400);
-        throw new Error('Usuário já cadastrado');
-      }
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      const verifyToken = crypto.randomBytes(32).toString('hex');
-      const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
-      const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const bankInfo = req.body.bankInfo ? JSON.stringify(req.body.bankInfo) : null;
-      const addressJson = address ? JSON.stringify(address) : null;
-
-      console.log(`[Register] Inserting user ${email}...`);
-      const inserted = await client.query(
-        'INSERT INTO users (name,email,password,role,phone,cpf_cnpj,address,bank_info,email_verification_token,email_verification_expires,email_verified,terms_accepted,terms_accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,name,email,role,phone,cpf_cnpj,address,bank_info,email_verified,ad_free_until,terms_accepted,terms_accepted_at',
-        [name, email, hashedPassword, roleNormalized, phone, cpfCnpj, addressJson, bankInfo, verifyHash, verifyExp, false, true, new Date()]
-      );
-      const userRow = inserted.rows[0];
-
-      const emailResult = await sendVerificationEmail(email, name, verifyToken);
-      if (!emailResult.success) {
-        console.error('Erro ao enviar e-mail de verificação:', emailResult.error);
-      }
-
-      let loginId = null;
-      if (roleNormalized === 'technician') {
-        console.log(`[Register] Creating technician profile for ${email}...`);
-        loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-        const mappedServices = Array.isArray(technician?.services)
-          ? technician.services.map((s) => ({
-            name: s.name || s.title || 'Serviço',
-            price: Number(s.initialPrice ?? s.price ?? 0) || 0,
-            estimatedTime: s.estimatedTime,
-            category: s.category,
-            isActive: s.isActive !== undefined ? s.isActive : true,
-          }))
-          : [];
-        const tData = {
-          user_id: userRow.id,
-          login_id: loginId,
-          services: mappedServices,
-          specialties: [],
-          pickup_service: !!technician?.pickupService,
-          pickup_fee: Number(technician?.pickupFee ?? 0) || 0,
-          payment_methods: Array.isArray(technician?.paymentMethods) ? technician.paymentMethods : [],
-        };
-        if (technician?.certifications) {
-          tData.specialties = technician.certifications
-            .split(',')
-            .map((cert) => cert.trim())
-            .filter(Boolean);
-        }
-
-        // Geocoding
-        let lat = null;
-        let lng = null;
-        if (address) {
-          try {
-            const coords = await GeocodingService.getCoordinates(address);
-            if (coords) {
-              lat = coords.latitude;
-              lng = coords.longitude;
-            }
-          } catch (e) {
-            console.error('Geocoding failed during registration:', e.message);
-          }
-        }
-
-        await client.query(
-          'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods,latitude,longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-          [tData.user_id, tData.login_id, JSON.stringify(tData.services), JSON.stringify(tData.specialties), tData.pickup_service, tData.pickup_fee, JSON.stringify(tData.payment_methods), lat, lng]
-        );
-      }
-
-      await client.query('COMMIT');
-      console.log(`[Register] Transaction committed for ${email}.`);
-
-      return res.status(201).json({
-        _id: userRow.id,
-        name: userRow.name,
-        email: userRow.email,
-        role: userRow.role,
-        phone: userRow.phone,
-        cpfCnpj: userRow.cpf_cnpj,
-        address: userRow.address || {},
-        bankInfo: userRow.bank_info || {},
-        emailVerified: userRow.email_verified,
-        adFreeUntil: userRow.ad_free_until || null,
-        isAdFree: userRow.ad_free_until ? new Date(userRow.ad_free_until) > new Date() : false,
-        ...(loginId ? { loginId } : {}),
-        token: (function () {
-          const t = generateToken(userRow.id);
-          try {
-            const decoded = jwt.decode(t);
-            const pool = getPool();
-            pool.query('UPDATE users SET current_jti=$1 WHERE id=$2', [decoded.jti, userRow.id]).catch(() => { });
-            res.cookie('token', t, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
-          } catch { }
-          return t;
-        })(),
-        message: 'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
-      });
-
-    } catch (err) {
-      await client.query('ROLLBACK');
-      console.error(`[Register] Transaction failed for ${email}:`, err);
-      throw err;
-    } finally {
-      client.release();
+      throw new InternalServerError('Configuração ausente: JWT_SECRET');
     }
 
+    const result = await userService.registerUser(req.body, {
+      ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '',
+      ua: req.headers['user-agent'] || '',
+    });
+
+    res.cookie('token', result.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 min
+    });
+
+    return res.status(201).json({
+      _id: result.user.id,
+      name: result.user.name,
+      email: result.user.email,
+      role: result.user.role,
+      phone: result.user.phone,
+      cpfCnpj: result.user.cpf_cnpj,
+      address: result.user.address || {},
+      bankInfo: result.user.bank_info || {},
+      emailVerified: result.user.email_verified,
+      adFreeUntil: result.user.ad_free_until || null,
+      isAdFree: result.user.ad_free_until
+        ? new Date(result.user.ad_free_until) > new Date()
+        : false,
+      ...(result.loginId ? { loginId: result.loginId } : {}),
+      token: result.accessToken,
+      refreshToken: result.refreshToken,
+      message:
+        'Usuário registrado com sucesso! Verifique seu e-mail para confirmar sua conta.',
+    });
   } catch (error) {
     console.error('Erro ao registrar usuário:', error?.message || error);
     if (!res.statusCode || res.statusCode === 200) {
-      res.status(500);
-      throw new Error('Serviço temporariamente indisponível. Tente novamente mais tarde.');
+      throw new InternalServerError(
+        'Serviço temporariamente indisponível. Tente novamente mais tarde.'
+      );
     } else {
       throw error;
     }
@@ -252,8 +237,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
   // Validação básica
   if (!email || !password) {
-    res.status(400);
-    throw new Error('Por favor, forneça email e senha');
+    throw new BadRequestError('Por favor, forneça email e senha');
   }
 
   // Fallback de modo demonstração
@@ -262,16 +246,14 @@ const loginUser = asyncHandler(async (req, res) => {
 
     if (!user) {
       logFailedLogin(email, req, 'Usuário não encontrado (modo demo)');
-      res.status(401);
-      throw new Error('Credenciais inválidas');
+      throw new UnauthorizedError('Credenciais inválidas');
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
 
     if (!passwordMatches) {
       logFailedLogin(email, req, 'Credenciais inválidas (modo demo)');
-      res.status(401);
-      throw new Error('Credenciais inválidas');
+      throw new UnauthorizedError('Credenciais inválidas');
     }
 
     // Log de login bem-sucedido
@@ -293,52 +275,45 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   try {
-    const pool = getPool();
-    const rs = await pool.query('SELECT * FROM users WHERE email=$1 LIMIT 1', [email]);
-    if (rs.rowCount === 0) {
-      logFailedLogin(email, req, 'Usuário não encontrado');
-      res.status(401);
-      throw new Error('Credenciais inválidas');
-    }
-    const user = rs.rows[0];
-    if (user.lock_until && new Date(user.lock_until) > Date.now()) {
-      logFailedLogin(email, req, 'Conta bloqueada temporariamente');
-      res.status(423);
-      throw new Error('Conta bloqueada temporariamente. Tente novamente mais tarde.');
-    }
-    const passwordMatches = await bcrypt.compare(password, user.password);
-    if (!passwordMatches) {
-      const failed = (user.failed_login_attempts || 0) + 1;
-      const lockUntil = failed >= MAX_FAILED_ATTEMPTS ? new Date(Date.now() + LOCK_TIME_MINUTES * 60 * 1000) : null;
-      await pool.query('UPDATE users SET failed_login_attempts=$1, lock_until=$2 WHERE id=$3', [failed, lockUntil, user.id]);
-      logFailedLogin(email, req, lockUntil ? 'Muitas tentativas, conta bloqueada' : 'Credenciais inválidas');
-      res.status(401);
-      throw new Error('Credenciais inválidas');
-    }
-    await pool.query('UPDATE users SET failed_login_attempts=0, lock_until=NULL, last_login_at=NOW() WHERE id=$1', [user.id]);
-    logLogin({ id: user.id, email: user.email, name: user.name }, req);
+    const result = await userService.authenticateUser(email, password, {
+      ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '',
+      ua: req.headers['user-agent'] || '',
+    });
+
+    logLogin(
+      { id: result.user.id, email: result.user.email, name: result.user.name },
+      req
+    );
+
     return res.json({
-      _id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      cpfCnpj: user.cpf_cnpj,
-      address: user.address || {},
-      emailVerified: user.email_verified,
-      adFreeUntil: user.ad_free_until || null,
-      isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
-      token: generateToken(user.id),
+      _id: result.user.id,
+      name: result.user.name,
+      email: result.user.email,
+      role: result.user.role,
+      phone: result.user.phone,
+      cpfCnpj: result.user.cpf_cnpj,
+      address: result.user.address || {},
+      emailVerified: result.user.email_verified,
+      adFreeUntil: result.user.ad_free_until || null,
+      isAdFree: result.user.ad_free_until
+        ? new Date(result.user.ad_free_until) > new Date()
+        : false,
+      token: result.accessToken,
+      refreshToken: result.refreshToken,
     });
   } catch (error) {
     console.error('Erro ao fazer login:', error?.message || error);
-    if (!error.message.includes('Credenciais inválidas') && !error.message.includes('bloqueada')) {
+    if (
+      !error.message.includes('Credenciais inválidas') &&
+      !error.message.includes('bloqueada')
+    ) {
       logFailedLogin(email, req, 'Erro interno do servidor');
     }
     // Preservar status previamente definido (ex.: 401/423) e propagar o erro
     if (!res.statusCode || res.statusCode === 200) {
-      res.status(500);
-      throw new Error('Serviço temporariamente indisponível. Tente novamente mais tarde.');
+      throw new InternalServerError(
+        'Serviço temporariamente indisponível. Tente novamente mais tarde.'
+      );
     } else {
       throw error;
     }
@@ -353,40 +328,51 @@ const loginTechnician = asyncHandler(async (req, res) => {
 
   // Validação básica
   if ((!loginId && !cpfCnpj) || !password) {
-    res.status(400);
-    throw new Error('Por favor, forneça CPF/CNPJ ou ID de login e a senha');
+    throw new BadRequestError(
+      'Por favor, forneça CPF/CNPJ ou ID de login e a senha'
+    );
   }
 
   // Fallback de modo demonstração
   if (isDemo) {
     let user = null;
     if (loginId) {
-      user = demoUsers.find((u) => u.loginId === loginId && u.role === 'technician');
+      user = demoUsers.find(
+        (u) => u.loginId === loginId && u.role === 'technician'
+      );
     } else if (cpfCnpj) {
-      user = demoUsers.find((u) => u.cpfCnpj === cpfCnpj && u.role === 'technician');
+      user = demoUsers.find(
+        (u) => u.cpfCnpj === cpfCnpj && u.role === 'technician'
+      );
     }
 
     if (!user) {
       const who = loginId ? `LoginID: ${loginId}` : `CPF/CNPJ: ${cpfCnpj}`;
       logFailedLogin(who, req, 'Identificador não encontrado (modo demo)');
-      res.status(401);
-      throw new Error('Credenciais inválidas');
+      throw new UnauthorizedError('Credenciais inválidas');
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
 
     if (!passwordMatches) {
-      const who = loginId ? `${user.email} (LoginID: ${loginId})` : `${user.email} (CPF/CNPJ: ${cpfCnpj})`;
+      const who = loginId
+        ? `${user.email} (LoginID: ${loginId})`
+        : `${user.email} (CPF/CNPJ: ${cpfCnpj})`;
       logFailedLogin(who, req, 'Senha incorreta (modo demo)');
-      res.status(401);
-      throw new Error('Credenciais inválidas');
+      throw new UnauthorizedError('Senha incorreta');
     }
 
-    // Sucesso: log de login
-    logLogin({ id: user._id, email: user.email, name: user.name, loginId: user.loginId, cpfCnpj: user.cpfCnpj }, req);
+    // Log de login bem-sucedido (modo demo)
+    logLogin(
+      {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        loginId: user.loginId,
+      },
+      req
+    );
 
-    const token = generateToken(user._id);
-    res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 12 * 60 * 60 * 1000 });
     return res.json({
       _id: user._id,
       name: user.name,
@@ -396,89 +382,67 @@ const loginTechnician = asyncHandler(async (req, res) => {
       cpfCnpj: user.cpfCnpj,
       address: user.address,
       emailVerified: user.emailVerified,
-      loginId: user.loginId,
+      loginId: user.loginId || null,
       adFreeUntil: user.adFreeUntil || null,
       isAdFree: false,
-      token,
+      token: generateToken(user._id),
     });
   }
 
+  // Modo produção (PostgreSQL)
   try {
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-    if (usePg) {
-      const pool = getPool();
-      let user = null;
-      let technician = null;
-      if (loginId) {
-        const rs = await pool.query('SELECT t.login_id,u.* FROM technicians t JOIN users u ON t.user_id=u.id WHERE t.login_id=$1 LIMIT 1', [loginId]);
-        if (rs.rowCount === 0) {
-          logFailedLogin(`LoginID: ${loginId}`, req, 'ID de login não encontrado');
-          res.status(401);
-          throw new Error('Credenciais inválidas');
-        }
-        const row = rs.rows[0];
-        user = row;
-        technician = { loginId: row.login_id };
-      } else if (cpfCnpj) {
-        const rsUser = await pool.query('SELECT * FROM users WHERE cpf_cnpj=$1 AND role=$2 LIMIT 1', [cpfCnpj, 'technician']);
-        if (rsUser.rowCount === 0) {
-          logFailedLogin(`CPF/CNPJ: ${cpfCnpj}`, req, 'Usuário não encontrado ou não é técnico');
-          res.status(401);
-          throw new Error('Credenciais inválidas');
-        }
-        user = rsUser.rows[0];
-        const rsTech = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-        technician = rsTech.rowCount ? { loginId: rsTech.rows[0].login_id } : null;
+    const result = await userService.authenticateTechnician(
+      loginId,
+      cpfCnpj,
+      password,
+      {
+        ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '',
+        ua: req.headers['user-agent'] || '',
       }
+    );
 
-      if (user.lock_until && new Date(user.lock_until) > Date.now()) {
-        const who = loginId ? `${user.email} (LoginID: ${loginId})` : `${user.email} (CPF/CNPJ: ${cpfCnpj})`;
-        logFailedLogin(who, req, 'Conta bloqueada temporariamente');
-        res.status(423);
-        throw new Error('Conta bloqueada temporariamente. Tente novamente mais tarde.');
-      }
+    logLogin(
+      {
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        loginId: result.technician?.loginId,
+        cpfCnpj: result.user.cpf_cnpj,
+      },
+      req
+    );
 
-      const passwordMatches = await bcrypt.compare(password, user.password);
-      if (!passwordMatches) {
-        const failed = (user.failed_login_attempts || 0) + 1;
-        const lockUntil = failed >= MAX_FAILED_ATTEMPTS ? new Date(Date.now() + LOCK_TIME_MINUTES * 60 * 1000) : null;
-        await pool.query('UPDATE users SET failed_login_attempts=$1, lock_until=$2 WHERE id=$3', [failed, lockUntil, user.id]);
-        const who = loginId ? `${user.email} (LoginID: ${loginId})` : `${user.email} (CPF/CNPJ: ${cpfCnpj})`;
-        logFailedLogin(who, req, lockUntil ? 'Muitas tentativas, conta bloqueada' : 'Senha incorreta');
-        res.status(401);
-        throw new Error('Credenciais inválidas');
-      }
-
-      await pool.query('UPDATE users SET failed_login_attempts=0, lock_until=NULL, last_login_at=NOW() WHERE id=$1', [user.id]);
-      logLogin({ id: user.id, email: user.email, name: user.name, loginId: technician?.loginId, cpfCnpj: user.cpf_cnpj }, req);
-
-      return res.json({
-        _id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        cpfCnpj: user.cpf_cnpj,
-        address: user.address || {},
-        emailVerified: user.email_verified,
-        loginId: technician?.loginId || null,
-        adFreeUntil: user.ad_free_until || null,
-        isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
-        token: generateToken(user.id),
-      });
-    }
-    res.status(500);
-    throw new Error('Banco de dados não configurado (Postgres obrigatório)');
+    return res.json({
+      _id: result.user.id,
+      name: result.user.name,
+      email: result.user.email,
+      role: result.user.role,
+      phone: result.user.phone,
+      cpfCnpj: result.user.cpf_cnpj,
+      address: result.user.address || {},
+      emailVerified: result.user.email_verified,
+      loginId: result.technician?.loginId || null,
+      adFreeUntil: result.user.ad_free_until || null,
+      isAdFree: result.user.ad_free_until
+        ? new Date(result.user.ad_free_until) > new Date()
+        : false,
+      token: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
   } catch (error) {
     console.error('Erro ao fazer login do técnico:', error?.message || error);
-    if (!error.message.includes('Credenciais inválidas') && !error.message.includes('bloqueada')) {
+    if (
+      !error.message.includes('Credenciais inválidas') &&
+      !error.message.includes('bloqueada')
+    ) {
       const who = loginId ? `LoginID: ${loginId}` : `CPF/CNPJ: ${cpfCnpj}`;
       logFailedLogin(who, req, 'Erro interno do servidor');
     }
     // Preservar status previamente definido (ex.: 401/423) e propagar o erro
     if (!res.statusCode || res.statusCode === 200) {
-      res.status(500);
-      throw new Error('Serviço temporariamente indisponível. Tente novamente mais tarde.');
+      throw new InternalServerError(
+        'Serviço temporariamente indisponível. Tente novamente mais tarde.'
+      );
     } else {
       throw error;
     }
@@ -490,19 +454,24 @@ const loginTechnician = asyncHandler(async (req, res) => {
 // @access  Private
 const upgradeToTechnician = asyncHandler(async (req, res) => {
   if (isDemo) {
-    res.status(400);
-    throw new Error('Operação indisponível em modo demonstração');
+    throw new BadRequestError('Operação indisponível em modo demonstração');
   }
 
+  // CORREÇÃO DE SEGURANÇA: Bloquear upgrade automático sem aprovação
+  throw new ForbiddenError('Auto-upgrade para técnico está desabilitado.');
+
   const pool = getPool();
-  const rsUser = await pool.query('SELECT * FROM users WHERE id=$1 LIMIT 1', [req.user._id || req.user.id]);
-  if (!rsUser.rowCount) {
-    res.status(404);
-    throw new Error('Usuário não encontrado');
+  // Usar userRepository para buscar usuário
+  const user = await userRepository.findById(req.userId);
+
+  if (!user) {
+    throw new NotFoundError('Usuário não encontrado');
   }
-  const user = rsUser.rows[0];
   if (user.role === 'technician') {
-    const rsTechExisting = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
+    const rsTechExisting = await pool.query(
+      'SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1',
+      [user.id]
+    );
     return res.status(200).json({
       _id: user.id,
       name: user.name,
@@ -514,36 +483,47 @@ const upgradeToTechnician = asyncHandler(async (req, res) => {
       bankInfo: user.bank_info || {},
       loginId: rsTechExisting.rowCount ? rsTechExisting.rows[0].login_id : null,
       adFreeUntil: user.ad_free_until || null,
-      isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
+      isAdFree: user.ad_free_until
+        ? new Date(user.ad_free_until) > new Date()
+        : false,
       token: generateToken(user.id),
     });
   }
-  let rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-  if (!rsTech.rowCount) {
-    const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-    const incoming = Array.isArray(req.body.technician?.services) ? req.body.technician.services : [];
-    const services = incoming.map((s) => ({
+
+  const { services, specialties, pickupService, pickupFee, paymentMethods } =
+    req.body;
+
+  if (!services || !Array.isArray(services) || services.length === 0) {
+    throw new BadRequestError('Pelo menos um serviço deve ser oferecido');
+  }
+
+  const loginId = `TEC${Date.now()}${Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, '0')}`;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query('UPDATE users SET role=$1 WHERE id=$2', [
+      'technician',
+      user.id,
+    ]);
+
+    const mappedServices = services.map((s) => ({
       name: s.name || s.title || 'Serviço',
-      description: s.description || s.details || '',
-      category: s.category || s.type || undefined,
-      price: Number(s.initialPrice != null ? s.initialPrice : s.price) || 0,
-      estimatedTime: s.estimatedTime || s.time || undefined,
+      price: Number(s.initialPrice ?? s.price ?? 0) || 0,
+      estimatedTime: s.estimatedTime,
+      category: s.category,
       isActive: s.isActive !== undefined ? s.isActive : true,
     }));
-    const pickupService = !!req.body.technician?.pickupService;
-    const pickupFee = Number(req.body.technician?.pickupFee ?? 0) || 0;
-    const paymentMethods = Array.isArray(req.body.technician?.paymentMethods) ? req.body.technician.paymentMethods : [];
-    const specialties = req.body.technician?.certifications
-      ? req.body.technician.certifications.split(',').map((c) => c.trim()).filter(Boolean)
-      : [];
 
     // Geocoding
     let lat = null;
     let lng = null;
-    const addressToGeocode = req.body.address || user.address;
-    if (addressToGeocode) {
+    if (user.address) {
       try {
-        const coords = await GeocodingService.getCoordinates(addressToGeocode);
+        const coords = await GeocodingService.getCoordinates(user.address);
         if (coords) {
           lat = coords.latitude;
           lng = coords.longitude;
@@ -553,184 +533,164 @@ const upgradeToTechnician = asyncHandler(async (req, res) => {
       }
     }
 
-    await pool.query(
+    await client.query(
       'INSERT INTO technicians (user_id,login_id,services,specialties,pickup_service,pickup_fee,payment_methods,latitude,longitude) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-      [user.id, loginId, JSON.stringify(services), JSON.stringify(specialties), pickupService, pickupFee, JSON.stringify(paymentMethods), lat, lng]
+      [
+        user.id,
+        loginId,
+        JSON.stringify(mappedServices),
+        JSON.stringify(specialties || []),
+        !!pickupService,
+        Number(pickupFee || 0),
+        JSON.stringify(paymentMethods || []),
+        lat,
+        lng,
+      ]
     );
-    rsTech = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-  }
-  await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', user.id]);
-  const loginId = rsTech.rowCount ? rsTech.rows[0].login_id : null;
-  return res.status(200).json({
-    _id: user.id,
-    name: user.name,
-    email: user.email,
-    role: 'technician',
-    phone: user.phone,
-    cpfCnpj: user.cpf_cnpj,
-    address: user.address || {},
-    bankInfo: user.bank_info || {},
-    loginId,
-    adFreeUntil: user.ad_free_until || null,
-    isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
-    token: generateToken(user.id),
-  });
-});
 
-// @desc    Obter dados do usuário atual
-// @route   GET /api/users/me
-// @access  Private
-const getMe = asyncHandler(async (req, res) => {
-  const isDemo = process.env.DEMO_MODE === 'true';
-  if (isDemo) {
-    const demoUser = demoUsers.find(u => u._id === req.user._id);
-    if (!demoUser) {
-      res.status(404);
-      throw new Error('Usuário não encontrado (modo demo)');
-    }
-    if (demoUser.role === 'technician') {
-      return res.status(200).json({
-        _id: demoUser._id,
-        name: demoUser.name,
-        email: demoUser.email,
-        role: demoUser.role,
-        phone: demoUser.phone,
-        cpfCnpj: demoUser.cpfCnpj,
-        address: demoUser.address,
-        services: demoUser.services || [],
-        specialties: [],
-        pickupService: false,
-        pickupFee: 0,
-        paymentMethods: [],
-        adFreeUntil: demoUser.adFreeUntil || null,
-        isAdFree: false,
-      });
-    }
-    return res.status(200).json({
-      _id: demoUser._id,
-      name: demoUser.name,
-      email: demoUser.email,
-      role: demoUser.role,
-      phone: demoUser.phone,
-      cpfCnpj: demoUser.cpfCnpj,
-      address: demoUser.address,
-      adFreeUntil: demoUser.adFreeUntil || null,
-      isAdFree: false,
-    });
-  }
-  const pool = getPool();
-  const userId = req.user.id || req.user._id;
-  const rsUser = await pool.query('SELECT * FROM users WHERE id=$1 LIMIT 1', [userId]);
-  if (!rsUser.rowCount) {
-    res.status(404);
-    throw new Error('Usuário não encontrado');
-  }
-  const user = rsUser.rows[0];
-  let effectiveRole = user.role;
-  const rsTechCheck = await pool.query('SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-  if (rsTechCheck.rowCount && effectiveRole !== 'technician') {
-    effectiveRole = 'technician';
-    try { await pool.query('UPDATE users SET role=$1 WHERE id=$2', ['technician', user.id]); } catch { }
-  }
-  if (effectiveRole === 'technician') {
-    const rsTech = await pool.query('SELECT * FROM technicians WHERE user_id=$1 LIMIT 1', [user.id]);
-    const tech = rsTech.rowCount ? rsTech.rows[0] : null;
-
-    // Merge pixKey from technicians table into bankInfo
-    const bankInfo = user.bank_info || {};
-    if (tech?.pix_key) {
-      bankInfo.pixKey = tech.pix_key;
-    }
+    await client.query('COMMIT');
 
     return res.status(200).json({
       _id: user.id,
       name: user.name,
       email: user.email,
-      role: effectiveRole,
+      role: 'technician',
       phone: user.phone,
       cpfCnpj: user.cpf_cnpj,
       address: user.address || {},
-      bankInfo,
-      pixKey: tech?.pix_key || null, // Also include at root level for easy access
-      services: tech?.services || [],
-      specialties: tech?.specialties || [],
-      pickupService: tech?.pickup_service || false,
-      pickupFee: tech?.pickup_fee || 0,
-      paymentMethods: tech?.payment_methods || [],
+      bankInfo: user.bank_info || {},
+      loginId,
       adFreeUntil: user.ad_free_until || null,
-      isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
+      isAdFree: user.ad_free_until
+        ? new Date(user.ad_free_until) > new Date()
+        : false,
+      token: generateToken(user.id),
     });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao promover usuário a técnico:', error);
+    throw new InternalServerError('Erro ao promover usuário');
+  } finally {
+    client.release();
   }
-  return res.status(200).json({
-    _id: user.id,
-    name: user.name,
-    email: user.email,
-    role: effectiveRole,
-    phone: user.phone,
-    cpfCnpj: user.cpf_cnpj,
-    address: user.address || {},
-    bankInfo: user.bank_info || {},
-    adFreeUntil: user.ad_free_until || null,
-    isAdFree: user.ad_free_until ? new Date(user.ad_free_until) > new Date() : false,
-  });
 });
 
-// Gerar JWT
-const generateToken = (id) => {
-  const jti = crypto.randomBytes(16).toString('hex');
-  return jwt.sign({ id, jti }, process.env.JWT_SECRET, {
-    expiresIn: '12h',
-  });
-};
+// @desc    Obter perfil do usuário atual
+// @route   GET /api/users/me
+// @access  Private
+const getMe = asyncHandler(async (req, res) => {
+  // Modo de demonstração (sem banco de dados)
+  if (isDemo) {
+    const user = demoUsers.find((u) => u._id === req.user._id);
+    if (user) {
+      return res.json({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        cpfCnpj: user.cpfCnpj,
+        address: user.address,
+        bankInfo: user.bankInfo || {},
+        profileImage: user.profileImage,
+        emailVerified: user.emailVerified,
+        adFreeUntil: user.adFreeUntil,
+        isAdFree: false,
+        ...(user.loginId ? { loginId: user.loginId } : {}),
+      });
+    }
+  }
+
+  const pool = getPool();
+  // Usar userRepository para buscar usuário
+  const user = await userRepository.findById(req.userId);
+
+  if (user) {
+    let loginId = null;
+    if (user.role === 'technician') {
+      const rsTech = await pool.query(
+        'SELECT login_id FROM technicians WHERE user_id=$1 LIMIT 1',
+        [user.id]
+      );
+      if (rsTech.rowCount) {
+        loginId = rsTech.rows[0].login_id;
+      }
+    }
+
+    res.json({
+      _id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      cpfCnpj: user.cpf_cnpj,
+      address: user.address || {},
+      bankInfo: user.bank_info || {},
+      profileImage: user.profile_image,
+      emailVerified: user.email_verified,
+      adFreeUntil: user.ad_free_until || null,
+      isAdFree: user.ad_free_until
+        ? new Date(user.ad_free_until) > new Date()
+        : false,
+      ...(loginId ? { loginId } : {}),
+    });
+  } else {
+    res.status(404);
+    throw new Error('Usuário não encontrado');
+  }
+});
 
 // @desc    Atualizar perfil do usuário
 // @route   PUT /api/users/profile
 // @access  Private
 const updateUserProfile = asyncHandler(async (req, res) => {
   try {
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
-    if (usePg) {
-      const pool = getPool();
-      const rsUser = await pool.query('SELECT * FROM users WHERE id=$1 LIMIT 1', [req.user._id]);
-      if (!rsUser.rowCount) {
-        res.status(404);
-        throw new Error('Usuário não encontrado');
-      }
-      const user = rsUser.rows[0];
-      const name = req.body.name || user.name;
-      const email = req.body.email || user.email;
-      const phone = req.body.phone || user.phone;
-      const cpf_cnpj = req.body.cpfCnpj || user.cpf_cnpj;
-      const address = req.body.address ? JSON.stringify(req.body.address) : user.address;
-      let bank_info = user.bank_info;
-      if (req.body.bankInfo && typeof req.body.bankInfo === 'object') {
-        bank_info = JSON.stringify({
-          bank: req.body.bankInfo.bank || (bank_info?.bank),
-          agency: req.body.bankInfo.agency || (bank_info?.agency),
-          account: req.body.bankInfo.account || (bank_info?.account),
-          pixKey: req.body.bankInfo.pixKey || (bank_info?.pixKey),
-        });
-      }
-      const profile_image = typeof req.body.profileImage === 'string' ? req.body.profileImage : user.profile_image;
-      let passwordSql = null;
-      let passwordChangedAt = null;
+    const pool = getPool();
+    // Usar userRepository para buscar usuário
+    const user = await userRepository.findById(req.userId);
+
+    if (user) {
+      // Atualizar campos básicos
+      const updatedFields = {
+        name: req.body.name || user.name,
+        email: req.body.email || user.email,
+        phone: req.body.phone || user.phone,
+        cpf_cnpj: req.body.cpfCnpj || user.cpf_cnpj,
+        address: req.body.address
+          ? JSON.stringify(req.body.address)
+          : JSON.stringify(user.address),
+        bank_info: req.body.bankInfo
+          ? JSON.stringify(req.body.bankInfo)
+          : JSON.stringify(user.bank_info),
+        profile_image: req.body.profileImage || user.profile_image,
+      };
+
+      // Se a senha foi fornecida, atualizar
       if (req.body.password) {
         const salt = await bcrypt.genSalt(10);
-        const hashed = await bcrypt.hash(req.body.password, salt);
-        passwordSql = hashed;
-        passwordChangedAt = new Date();
+        updatedFields.password = await bcrypt.hash(req.body.password, salt);
       }
+
+      // Construir query de update dinamicamente
+      const keys = Object.keys(updatedFields);
+      const values = Object.values(updatedFields);
+      const setClause = keys
+        .map((key, index) => `${key}=$${index + 1}`)
+        .join(', ');
+
       await pool.query(
-        'UPDATE users SET name=$1,email=$2,phone=$3,cpf_cnpj=$4,address=$5,bank_info=$6,profile_image=$7, password=COALESCE($8,password), password_changed_at=COALESCE($9,password_changed_at) WHERE id=$10',
-        [name, email, phone, cpf_cnpj, address, bank_info, profile_image, passwordSql, passwordChangedAt, user.id]
+        `UPDATE users SET ${setClause} WHERE id=$${keys.length + 1}`,
+        [...values, user.id]
       );
 
-      // Se for técnico, atualizar dados específicos na tabela technicians
+      // Se for técnico, atualizar dados específicos
       if (user.role === 'technician') {
         // Atualizar coordenadas se mudou o endereço
         if (req.body.address) {
           try {
-            const coords = await GeocodingService.getCoordinates(req.body.address);
+            const coords = await GeocodingService.getCoordinates(
+              req.body.address
+            );
             if (coords) {
               await pool.query(
                 'UPDATE technicians SET latitude=$1, longitude=$2, address_street=$3, address_number=$4, address_city=$5, address_state=$6, address_zipcode=$7 WHERE user_id=$8',
@@ -742,13 +702,18 @@ const updateUserProfile = asyncHandler(async (req, res) => {
                   req.body.address.city,
                   req.body.address.state,
                   req.body.address.zipcode,
-                  user.id
+                  user.id,
                 ]
               );
-              console.log(`Coordenadas atualizadas para técnico ${user.id}: ${coords.latitude}, ${coords.longitude}`);
+              console.log(
+                `Coordenadas atualizadas para técnico ${user.id}: ${coords.latitude}, ${coords.longitude}`
+              );
             }
           } catch (geoError) {
-            console.error('Erro ao atualizar coordenadas no perfil:', geoError.message);
+            console.error(
+              'Erro ao atualizar coordenadas no perfil:',
+              geoError.message
+            );
           }
         }
 
@@ -765,7 +730,9 @@ const updateUserProfile = asyncHandler(async (req, res) => {
           }
         }
       }
-      const rsUpdated = await pool.query('SELECT * FROM users WHERE id=$1', [user.id]);
+      const rsUpdated = await pool.query('SELECT * FROM users WHERE id=$1', [
+        user.id,
+      ]);
       const updatedUser = rsUpdated.rows[0];
       return res.status(200).json({
         _id: updatedUser.id,
@@ -778,7 +745,9 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         bankInfo: updatedUser.bank_info || {},
         profileImage: updatedUser.profile_image,
         adFreeUntil: updatedUser.ad_free_until || null,
-        isAdFree: updatedUser.ad_free_until ? new Date(updatedUser.ad_free_until) > new Date() : false,
+        isAdFree: updatedUser.ad_free_until
+          ? new Date(updatedUser.ad_free_until) > new Date()
+          : false,
         token: generateToken(updatedUser.id),
       });
     }
@@ -787,7 +756,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
     console.log('Usando modo de demonstração para updateUserProfile'.yellow);
 
     // Encontrar usuário demo pelo ID
-    const demoUserIndex = demoUsers.findIndex(u => u._id === req.user._id);
+    const demoUserIndex = demoUsers.findIndex((u) => u._id === req.user._id);
 
     if (demoUserIndex !== -1) {
       // Atualizar usuário demo
@@ -798,13 +767,26 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         phone: req.body.phone || demoUsers[demoUserIndex].phone,
         cpfCnpj: req.body.cpfCnpj || demoUsers[demoUserIndex].cpfCnpj,
         address: req.body.address || demoUsers[demoUserIndex].address,
-        profileImage: typeof req.body.profileImage === 'string' ? req.body.profileImage : demoUsers[demoUserIndex].profileImage,
-        bankInfo: req.body.bankInfo ? {
-          bank: req.body.bankInfo.bank || demoUsers[demoUserIndex].bankInfo?.bank,
-          agency: req.body.bankInfo.agency || demoUsers[demoUserIndex].bankInfo?.agency,
-          account: req.body.bankInfo.account || demoUsers[demoUserIndex].bankInfo?.account,
-          pixKey: req.body.bankInfo.pixKey || demoUsers[demoUserIndex].bankInfo?.pixKey,
-        } : demoUsers[demoUserIndex].bankInfo,
+        profileImage:
+          typeof req.body.profileImage === 'string'
+            ? req.body.profileImage
+            : demoUsers[demoUserIndex].profileImage,
+        bankInfo: req.body.bankInfo
+          ? {
+              bank:
+                req.body.bankInfo.bank ||
+                demoUsers[demoUserIndex].bankInfo?.bank,
+              agency:
+                req.body.bankInfo.agency ||
+                demoUsers[demoUserIndex].bankInfo?.agency,
+              account:
+                req.body.bankInfo.account ||
+                demoUsers[demoUserIndex].bankInfo?.account,
+              pixKey:
+                req.body.bankInfo.pixKey ||
+                demoUsers[demoUserIndex].bankInfo?.pixKey,
+            }
+          : demoUsers[demoUserIndex].bankInfo,
       };
 
       const updatedUser = demoUsers[demoUserIndex];
@@ -822,8 +804,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         token: generateToken(updatedUser._id),
       });
     } else {
-      res.status(404);
-      throw new Error('Usuário não encontrado (modo demo)');
+      throw new NotFoundError('Usuário não encontrado (modo demo)');
     }
   }
 });
@@ -836,19 +817,57 @@ const verifyEmail = asyncHandler(async (req, res) => {
     const pool = getPool();
     const { token } = req.params;
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    const rs = await pool.query('SELECT id FROM users WHERE email_verification_token=$1 AND email_verification_expires > NOW() LIMIT 1', [hashedToken]);
-    if (!rs.rowCount) {
-      res.status(400);
-      throw new Error('Token de verificação inválido ou expirado');
+    // Usar userRepository para buscar por token
+    const user = await userRepository.findByVerificationToken(hashedToken);
+
+    if (!user) {
+      throw new BadRequestError('Token de verificação inválido ou expirado');
     }
-    const id = rs.rows[0].id;
-    await pool.query('UPDATE users SET email_verified=TRUE, email_verification_token=NULL, email_verification_expires=NULL WHERE id=$1', [id]);
-    return res.status(200).json({ message: 'E-mail verificado com sucesso!', emailVerified: true });
+    const id = user.id;
+    await pool.query(
+      'UPDATE users SET email_verified=TRUE, email_verification_token=NULL, email_verification_expires=NULL WHERE id=$1',
+      [id]
+    );
+    return res
+      .status(200)
+      .json({ message: 'E-mail verificado com sucesso!', emailVerified: true });
   } catch (error) {
     console.error('Erro ao verificar e-mail:', error);
-    res.status(500);
-    throw new Error('Erro interno do servidor');
+    throw new InternalServerError('Erro interno do servidor');
   }
+});
+
+// @desc    Atualizar preferências do usuário (appearance, language, notifications, privacy)
+// @route   PUT /api/users/settings
+// @access  Private
+const updateUserSettings = asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const userId = req.userId;
+  const settings = req.body && typeof req.body === 'object' ? req.body : {};
+  await pool.query('UPDATE users SET settings=$1 WHERE id=$2', [
+    JSON.stringify(settings),
+    userId,
+  ]);
+  const rs = await pool.query(
+    'SELECT id,name,email,role,phone,cpf_cnpj,address,bank_info,settings,ad_free_until FROM users WHERE id=$1 LIMIT 1',
+    [userId]
+  );
+  const user = rs.rows[0];
+  return res.status(200).json({
+    _id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    phone: user.phone,
+    cpfCnpj: user.cpf_cnpj,
+    address: user.address || {},
+    bankInfo: user.bank_info || {},
+    settings: user.settings || {},
+    adFreeUntil: user.ad_free_until || null,
+    isAdFree: user.ad_free_until
+      ? new Date(user.ad_free_until) > new Date()
+      : false,
+  });
 });
 
 // @desc    Reenviar e-mail de verificação
@@ -857,22 +876,36 @@ const verifyEmail = asyncHandler(async (req, res) => {
 const resendVerificationEmail = asyncHandler(async (req, res) => {
   try {
     const pool = getPool();
-    const rsUser = await pool.query('SELECT id,name,email FROM users WHERE id=$1 LIMIT 1', [req.user.id || req.user._id]);
+    const rsUser = await pool.query(
+      'SELECT id,name,email FROM users WHERE id=$1 LIMIT 1',
+      [req.userId]
+    );
     if (!rsUser.rowCount) {
-      res.status(404);
-      throw new Error('Usuário não encontrado');
+      throw new NotFoundError('Usuário não encontrado');
     }
     const user = rsUser.rows[0];
     const verifyToken = crypto.randomBytes(32).toString('hex');
-    const verifyHash = crypto.createHash('sha256').update(verifyToken).digest('hex');
+    const verifyHash = crypto
+      .createHash('sha256')
+      .update(verifyToken)
+      .digest('hex');
     const verifyExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await pool.query('UPDATE users SET email_verification_token=$1, email_verification_expires=$2 WHERE id=$3', [verifyHash, verifyExp, user.id]);
-    const emailResult = await sendVerificationEmail(user.email, user.name, verifyToken);
+    await pool.query(
+      'UPDATE users SET email_verification_token=$1, email_verification_expires=$2 WHERE id=$3',
+      [verifyHash, verifyExp, user.id]
+    );
+    const emailResult = await sendVerificationEmail(
+      user.email,
+      user.name,
+      verifyToken
+    );
     if (!emailResult.success) {
       res.status(500);
       throw new Error('Erro ao enviar e-mail de verificação');
     }
-    return res.status(200).json({ message: 'E-mail de verificação reenviado com sucesso!' });
+    return res
+      .status(200)
+      .json({ message: 'E-mail de verificação reenviado com sucesso!' });
   } catch (error) {
     console.error('Erro ao reenviar e-mail de verificação:', error);
     res.status(500);
@@ -887,28 +920,35 @@ const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
   try {
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
+    const usePg =
+      (process.env.DB_TYPE || '').toLowerCase() === 'postgres' ||
+      !!process.env.DATABASE_URL;
     if (usePg) {
-      const pool = getPool();
-      const rs = await pool.query('SELECT id FROM users WHERE email=$1 LIMIT 1', [email]);
-      if (!rs.rowCount) {
-        res.status(404);
-        throw new Error('Usuário não encontrado');
+      // Usar userRepository para verificar existência
+      const exists = await userRepository.existsByEmail(email);
+
+      if (!exists) {
+        throw new NotFoundError('Usuário não encontrado');
       }
-      return res.status(200).json({ message: 'Instruções para redefinir a senha foram enviadas para o seu email' });
+      return res.status(200).json({
+        message:
+          'Instruções para redefinir a senha foram enviadas para o seu email',
+      });
     }
   } catch (error) {
     // Modo de demonstração (sem banco de dados)
     console.log('Usando modo de demonstração para forgotPassword'.yellow);
 
     // Verificar se o usuário existe no modo demo
-    const demoUser = demoUsers.find(u => u.email === email);
+    const demoUser = demoUsers.find((u) => u.email === email);
 
     if (demoUser) {
-      res.status(200).json({ message: 'Instruções para redefinir a senha foram enviadas para o seu email (modo demo)' });
+      res.status(200).json({
+        message:
+          'Instruções para redefinir a senha foram enviadas para o seu email (modo demo)',
+      });
     } else {
-      res.status(404);
-      throw new Error('Usuário não encontrado (modo demo)');
+      throw new NotFoundError('Usuário não encontrado (modo demo)');
     }
   }
 });
@@ -918,13 +958,15 @@ const forgotPassword = asyncHandler(async (req, res) => {
 // @access  Private
 const getTechnicians = asyncHandler(async (req, res) => {
   if (isDemo) {
-    const techs = demoUsers.filter(u => u.role === 'technician').map(u => ({
-      _id: u._id,
-      name: u.name,
-      specialties: u.services ? u.services.map(s => s.name) : [],
-      rating: 5.0, // Mock rating
-      distance: (Math.random() * 10).toFixed(1), // Mock distance
-    }));
+    const techs = demoUsers
+      .filter((u) => u.role === 'technician')
+      .map((u) => ({
+        _id: u._id,
+        name: u.name,
+        specialties: u.services ? u.services.map((s) => s.name) : [],
+        rating: 5.0, // Mock rating
+        distance: (Math.random() * 10).toFixed(1), // Mock distance
+      }));
     return res.json(techs);
   }
 
@@ -939,20 +981,28 @@ const getTechnicians = asyncHandler(async (req, res) => {
     `;
     const result = await pool.query(query);
 
-    const technicians = result.rows.map(row => {
+    const technicians = result.rows.map((row) => {
       let specialties = [];
       try {
-        specialties = typeof row.specialties === 'string' ? JSON.parse(row.specialties) : row.specialties;
-      } catch (e) { specialties = []; }
+        specialties =
+          typeof row.specialties === 'string'
+            ? JSON.parse(row.specialties)
+            : row.specialties;
+      } catch (e) {
+        specialties = [];
+      }
 
       // If no specialties, try to get from services
       if (!specialties || specialties.length === 0) {
         try {
-          const services = typeof row.services === 'string' ? JSON.parse(row.services) : row.services;
+          const services =
+            typeof row.services === 'string'
+              ? JSON.parse(row.services)
+              : row.services;
           if (Array.isArray(services)) {
-            specialties = services.map(s => s.name);
+            specialties = services.map((s) => s.name);
           }
-        } catch (e) { }
+        } catch (e) {}
       }
 
       return {
@@ -960,15 +1010,14 @@ const getTechnicians = asyncHandler(async (req, res) => {
         name: row.name,
         specialties: specialties || [],
         rating: 5.0, // Placeholder until rating system is implemented
-        distance: (Math.random() * 10).toFixed(1) // Placeholder until geolocation is implemented
+        distance: (Math.random() * 10).toFixed(1), // Placeholder until geolocation is implemented
       };
     });
 
     res.json(technicians);
   } catch (error) {
     console.error('Erro ao buscar técnicos:', error);
-    res.status(500);
-    throw new Error('Erro ao buscar lista de técnicos');
+    throw new InternalServerError('Erro ao buscar lista de técnicos');
   }
 });
 
@@ -986,16 +1035,36 @@ const logoutUser = asyncHandler(async (req, res) => {
       return res.status(200).json({ message: 'Logout efetuado' });
     }
     const expiresAt = new Date(decoded.exp * 1000);
-    const jti = decoded.jti || crypto.createHash('sha256').update(token).digest('hex');
-    const usePg = (process.env.DB_TYPE || '').toLowerCase() === 'postgres' || !!process.env.DATABASE_URL;
+    const jti =
+      decoded.jti || crypto.createHash('sha256').update(token).digest('hex');
+    const usePg =
+      (process.env.DB_TYPE || '').toLowerCase() === 'postgres' ||
+      !!process.env.DATABASE_URL;
     if (usePg) {
       const pool = getPool();
-      await pool.query('INSERT INTO blacklisted_tokens (jti, user_id, expires_at, reason) VALUES ($1,$2,$3,$4) ON CONFLICT (jti) DO NOTHING', [jti, decoded.id, expiresAt, 'logout']);
+      await pool.query(
+        'INSERT INTO blacklisted_tokens (jti, user_id, expires_at, reason) VALUES ($1,$2,$3,$4) ON CONFLICT (jti) DO NOTHING',
+        [jti, decoded.id, expiresAt, 'logout']
+      );
+
+      // Revogar refresh token se fornecido no corpo ou header (opcional, mas recomendado limpar todos do usuário ou específico)
+      // Como não recebemos o refresh token no logout padrão, vamos revogar pelo user_id se possível, ou apenas confiar na expiração curta do access token
+      // Mas se tivermos o refresh token no body, revogamos
+      if (req.body.refreshToken) {
+        await revokeRefreshToken(req.body.refreshToken);
+      }
     }
     if (req.user) {
-      logLogout({ id: req.user._id || req.user.id, email: req.user.email }, req);
+      logLogout({ id: req.userId, email: req.user.email }, req);
     }
-    try { res.clearCookie('token', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' }); } catch { }
+    try {
+      res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 15 * 60 * 1000,
+      });
+    } catch {}
     return res.status(200).json({ message: 'Logout efetuado com sucesso' });
   } catch (e) {
     return res.status(200).json({ message: 'Logout efetuado' });
@@ -1006,14 +1075,20 @@ const logoutUser = asyncHandler(async (req, res) => {
 const getDebug = asyncHandler(async (req, res) => {
   try {
     const pool = getPool();
-    const existsRs = await pool.query("SELECT to_regclass('public.users') AS users, to_regclass('public.technicians') AS technicians");
+    const existsRs = await pool.query(
+      "SELECT to_regclass('public.users') AS users, to_regclass('public.technicians') AS technicians"
+    );
     const usersExists = !!existsRs.rows[0].users;
     const techsExists = !!existsRs.rows[0].technicians;
-    let countUsers = 0, countTechs = 0, recent = [];
+    let countUsers = 0,
+      countTechs = 0,
+      recent = [];
     if (usersExists) {
       const cu = await pool.query('SELECT COUNT(*)::int AS c FROM users');
       countUsers = cu.rows[0].c;
-      const ru = await pool.query('SELECT id,email,role,created_at FROM users ORDER BY created_at DESC NULLS LAST LIMIT 5');
+      const ru = await pool.query(
+        'SELECT id,email,role,created_at FROM users ORDER BY created_at DESC NULLS LAST LIMIT 5'
+      );
       recent = ru.rows;
     }
     if (techsExists) {
@@ -1024,7 +1099,9 @@ const getDebug = asyncHandler(async (req, res) => {
     const safeUrl = url.replace(/:[^:@/]+@/, '://****@');
     return res.status(200).json({
       env: process.env.NODE_ENV,
-      ssl: (process.env.POSTGRES_SSL || ((process.env.NODE_ENV === 'production') ? 'true' : 'false')),
+      ssl:
+        process.env.POSTGRES_SSL ||
+        (process.env.NODE_ENV === 'production' ? 'true' : 'false'),
       dbUrl: safeUrl,
       tables: { users: usersExists, technicians: techsExists },
       counts: { users: countUsers, technicians: countTechs },
@@ -1035,6 +1112,125 @@ const getDebug = asyncHandler(async (req, res) => {
   }
 });
 
+// Listar sessões ativas do usuário
+const listSessions = asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const rs = await pool.query(
+    'SELECT id,jti,user_agent,ip,created_at,last_used_at,revoked_at FROM sessions WHERE user_id=$1 ORDER BY created_at DESC',
+    [req.userId]
+  );
+  return res.json({ items: rs.rows });
+});
+
+// Revogar sessão específica (por jti)
+const revokeSession = asyncHandler(async (req, res) => {
+  const { jti } = req.body;
+  if (!jti) {
+    throw new BadRequestError('jti é obrigatório');
+  }
+  const pool = getPool();
+  await pool.query(
+    'UPDATE sessions SET revoked_at=NOW() WHERE jti=$1 AND user_id=$2',
+    [jti, req.userId]
+  );
+  // Adicionar à blacklist até expirar token (12h padrão)
+  const exp = new Date(Date.now() + 12 * 60 * 60 * 1000);
+  await pool.query(
+    'INSERT INTO blacklisted_tokens (jti, user_id, expires_at, reason) VALUES ($1,$2,$3,$4) ON CONFLICT (jti) DO NOTHING',
+    [jti, req.userId, exp, 'revoked_by_user']
+  );
+  return res.json({ message: 'Sessão revogada' });
+});
+
+// Inicializar 2FA: cria código temporário
+const twofaInit = asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const exp = new Date(Date.now() + 5 * 60 * 1000);
+  await pool.query(
+    'UPDATE users SET twofa_temp_code=$1, twofa_temp_expires=$2 WHERE id=$3',
+    [code, exp, req.userId]
+  );
+  return res.json({ message: 'Código gerado', expiresAt: exp });
+});
+
+// Verificar 2FA e ativar
+const twofaVerify = asyncHandler(async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    throw new BadRequestError('Código é obrigatório');
+  }
+  const pool = getPool();
+  const rs = await pool.query(
+    'SELECT twofa_temp_code, twofa_temp_expires FROM users WHERE id=$1',
+    [req.userId]
+  );
+  if (!rs.rowCount) {
+    throw new NotFoundError('Usuário não encontrado');
+  }
+  const row = rs.rows[0];
+  if (!row.twofa_temp_code || !row.twofa_temp_expires) {
+    throw new BadRequestError('2FA não iniciado');
+  }
+  if (String(row.twofa_temp_code) !== String(code)) {
+    throw new BadRequestError('Código inválido');
+  }
+  if (new Date(row.twofa_temp_expires) < new Date()) {
+    throw new BadRequestError('Código expirado');
+  }
+  await pool.query(
+    'UPDATE users SET twofa_enabled=TRUE, twofa_secret=$1, twofa_temp_code=NULL, twofa_temp_expires=NULL WHERE id=$2',
+    [row.twofa_temp_code, req.userId]
+  );
+  return res.json({ message: '2FA ativado' });
+});
+
+// Desativar 2FA
+const twofaDisable = asyncHandler(async (req, res) => {
+  const pool = getPool();
+  await pool.query(
+    'UPDATE users SET twofa_enabled=FALSE, twofa_secret=NULL, twofa_temp_code=NULL, twofa_temp_expires=NULL WHERE id=$1',
+    [req.userId]
+  );
+  return res.json({ message: '2FA desativado' });
+});
+
+// @desc    Atualizar access token usando refresh token
+// @route   POST /api/users/refresh
+// @access  Public
+const refreshToken = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    throw new BadRequestError('Refresh token não fornecido');
+  }
+
+  try {
+    const { decoded, dbToken } = await verifyRefreshToken(refreshToken);
+
+    // Gerar novo access token
+    // Precisamos buscar o usuário para garantir que ele ainda existe e pegar os dados atualizados
+    const pool = getPool();
+    const rsUser = await pool.query('SELECT * FROM users WHERE id=$1 LIMIT 1', [
+      decoded.id,
+    ]);
+
+    if (!rsUser.rowCount) {
+      throw new UnauthorizedError('Usuário não encontrado');
+    }
+
+    const user = rsUser.rows[0];
+    const accessToken = generateAccessToken(user);
+
+    res.json({
+      token: accessToken,
+    });
+  } catch (error) {
+    console.error('Erro no refresh token:', error.message);
+    throw new UnauthorizedError('Refresh token inválido ou expirado');
+  }
+});
+
 module.exports = {
   registerUser,
   loginUser,
@@ -1042,10 +1238,17 @@ module.exports = {
   upgradeToTechnician,
   getMe,
   updateUserProfile,
+  updateUserSettings,
   forgotPassword,
   verifyEmail,
   resendVerificationEmail,
   logoutUser,
   getDebug,
   getTechnicians,
+  listSessions,
+  revokeSession,
+  twofaInit,
+  twofaVerify,
+  twofaDisable,
+  refreshToken,
 };

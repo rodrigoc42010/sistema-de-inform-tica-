@@ -43,7 +43,6 @@ export const login = createAsyncThunk('auth/login', async (user, thunkAPI) => {
   }
 });
 
-
 // Logout de usuário
 export const logout = createAsyncThunk('auth/logout', async () => {
   await authService.logout();
@@ -72,8 +71,7 @@ export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
   async (userData, thunkAPI) => {
     try {
-      const token = thunkAPI.getState().auth.user.token;
-      return await authService.updateProfile(userData, token);
+      return await authService.updateProfile(userData);
     } catch (error) {
       const message =
         (error.response &&

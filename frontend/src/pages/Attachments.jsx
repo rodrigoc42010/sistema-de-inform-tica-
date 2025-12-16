@@ -5,7 +5,6 @@ import {
   Card,
   CardContent,
   CardMedia,
-  Chip,
   CircularProgress,
   Container,
   Dialog,
@@ -41,7 +40,7 @@ import {
   Search as SearchIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { selectUserRole } from '../selectors/authSelectors';
 import Sidebar from '../components/Sidebar';
@@ -64,19 +63,29 @@ const FileSize = ({ bytes }) => {
   if (bytes < 1024) {
     return <Typography variant="body2">{bytes} B</Typography>;
   } else if (bytes < 1024 * 1024) {
-    return <Typography variant="body2">{(bytes / 1024).toFixed(1)} KB</Typography>;
+    return (
+      <Typography variant="body2">{(bytes / 1024).toFixed(1)} KB</Typography>
+    );
   } else if (bytes < 1024 * 1024 * 1024) {
-    return <Typography variant="body2">{(bytes / (1024 * 1024)).toFixed(1)} MB</Typography>;
+    return (
+      <Typography variant="body2">
+        {(bytes / (1024 * 1024)).toFixed(1)} MB
+      </Typography>
+    );
   } else {
-    return <Typography variant="body2">{(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB</Typography>;
+    return (
+      <Typography variant="body2">
+        {(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB
+      </Typography>
+    );
   }
 };
 
 function Attachments() {
   const { ticketId } = useParams();
-  const navigate = useNavigate();
+
   const userRole = useSelector(selectUserRole);
-  
+
   const [loading, setLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,7 +98,7 @@ function Attachments() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  
+
   // Mock data para anexos
   const [attachments, setAttachments] = useState([
     {
@@ -194,15 +203,15 @@ function Attachments() {
 
   const handleUpload = () => {
     if (filesToUpload.length === 0) return;
-    
+
     setUploading(true);
-    
+
     // Simular upload com progresso
     let progress = 0;
     const interval = setInterval(() => {
       progress += 10;
       setUploadProgress(progress);
-      
+
       if (progress >= 100) {
         clearInterval(interval);
         setTimeout(() => {
@@ -216,9 +225,11 @@ function Attachments() {
             uploadedBy: userRole === 'client' ? 'Cliente' : 'Técnico',
             ticketId: ticketId || '123',
             description: '',
-            url: file.type.startsWith('image/') ? URL.createObjectURL(file) : '#',
+            url: file.type.startsWith('image/')
+              ? URL.createObjectURL(file)
+              : '#',
           }));
-          
+
           setAttachments([...attachments, ...newAttachments]);
           setUploading(false);
           setUploadDialogOpen(false);
@@ -245,7 +256,7 @@ function Attachments() {
 
   const handleDeleteConfirm = () => {
     // Remover o anexo da lista
-    setAttachments(attachments.filter(a => a.id !== selectedAttachment.id));
+    setAttachments(attachments.filter((a) => a.id !== selectedAttachment.id));
     setDeleteDialogOpen(false);
   };
 
@@ -256,29 +267,35 @@ function Attachments() {
   const handleDownload = () => {
     setAnchorEl(null);
     // Lógica para download do arquivo
-    console.log('Download:', selectedAttachment.fileName);
+    // Download attachment
     // Em uma implementação real, aqui seria feita uma requisição para baixar o arquivo
   };
 
   // Filtrar anexos com base na pesquisa e na aba selecionada
   const filteredAttachments = attachments.filter((attachment) => {
-    const matchesSearch = searchQuery === '' || 
+    const matchesSearch =
+      searchQuery === '' ||
       attachment.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       attachment.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    if (tabValue === 0) { // Todos
+
+    if (tabValue === 0) {
+      // Todos
       return matchesSearch;
-    } else if (tabValue === 1) { // Imagens
+    } else if (tabValue === 1) {
+      // Imagens
       return matchesSearch && attachment.fileType.startsWith('image/');
-    } else if (tabValue === 2) { // Vídeos
+    } else if (tabValue === 2) {
+      // Vídeos
       return matchesSearch && attachment.fileType.startsWith('video/');
-    } else if (tabValue === 3) { // Documentos
-      return matchesSearch && (
-        attachment.fileType.startsWith('application/') ||
-        attachment.fileType.startsWith('text/')
+    } else if (tabValue === 3) {
+      // Documentos
+      return (
+        matchesSearch &&
+        (attachment.fileType.startsWith('application/') ||
+          attachment.fileType.startsWith('text/'))
       );
     }
-    
+
     return false;
   });
 
@@ -297,7 +314,14 @@ function Attachments() {
       >
         <Container maxWidth="lg">
           <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                mb: 3,
+              }}
+            >
               <Typography variant="h4" component="h1">
                 {ticketId ? `Anexos do Chamado #${ticketId}` : 'Anexos'}
               </Typography>
@@ -325,7 +349,11 @@ function Attachments() {
                         value={searchQuery}
                         onChange={handleSearchChange}
                         InputProps={{
-                          startAdornment: <SearchIcon sx={{ color: 'action.active', mr: 1 }} />,
+                          startAdornment: (
+                            <SearchIcon
+                              sx={{ color: 'action.active', mr: 1 }}
+                            />
+                          ),
                         }}
                       />
                     </Grid>
@@ -351,7 +379,13 @@ function Attachments() {
                   <Grid container spacing={3}>
                     {filteredAttachments.map((attachment) => (
                       <Grid item xs={12} sm={6} md={4} key={attachment.id}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <Card
+                          sx={{
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                          }}
+                        >
                           {attachment.fileType.startsWith('image/') ? (
                             <CardMedia
                               component="img"
@@ -375,8 +409,20 @@ function Attachments() {
                             </Box>
                           )}
                           <CardContent sx={{ flexGrow: 1 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <Typography variant="h6" component="div" noWrap sx={{ maxWidth: '80%' }} title={attachment.fileName}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <Typography
+                                variant="h6"
+                                component="div"
+                                noWrap
+                                sx={{ maxWidth: '80%' }}
+                                title={attachment.fileName}
+                              >
                                 {attachment.fileName}
                               </Typography>
                               <IconButton
@@ -386,13 +432,27 @@ function Attachments() {
                                 <MoreVertIcon />
                               </IconButton>
                             </Box>
-                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              gutterBottom
+                            >
                               Enviado por: {attachment.uploadedBy}
                             </Typography>
-                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              gutterBottom
+                            >
                               {new Date(attachment.uploadDate).toLocaleString()}
                             </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                mt: 1,
+                              }}
+                            >
                               <FileTypeIcon fileType={attachment.fileType} />
                               <Box sx={{ ml: 1 }}>
                                 <FileSize bytes={attachment.fileSize} />
@@ -405,7 +465,13 @@ function Attachments() {
                             )}
                           </CardContent>
                           <Divider />
-                          <Box sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}>
+                          <Box
+                            sx={{
+                              p: 1,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
                             <Button
                               size="small"
                               startIcon={<VisibilityIcon />}
@@ -427,12 +493,20 @@ function Attachments() {
                   </Grid>
                 ) : (
                   <Box sx={{ textAlign: 'center', py: 5 }}>
-                    <AttachFileIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                    <AttachFileIcon
+                      sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }}
+                    />
+                    <Typography
+                      variant="h6"
+                      color="text.secondary"
+                      gutterBottom
+                    >
                       Nenhum anexo encontrado
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {searchQuery ? 'Tente ajustar sua pesquisa.' : 'Envie arquivos para este chamado usando o botão acima.'}
+                      {searchQuery
+                        ? 'Tente ajustar sua pesquisa.'
+                        : 'Envie arquivos para este chamado usando o botão acima.'}
                     </Typography>
                   </Box>
                 )}
@@ -448,10 +522,12 @@ function Attachments() {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={() => {
-          handleMenuClose();
-          handleFileSelect(selectedAttachment);
-        }}>
+        <MenuItem
+          onClick={() => {
+            handleMenuClose();
+            handleFileSelect(selectedAttachment);
+          }}
+        >
           <ListItemIcon>
             <VisibilityIcon fontSize="small" />
           </ListItemIcon>
@@ -468,7 +544,10 @@ function Attachments() {
           <ListItemIcon>
             <DeleteIcon fontSize="small" color="error" />
           </ListItemIcon>
-          <ListItemText primary="Excluir" primaryTypographyProps={{ color: 'error' }} />
+          <ListItemText
+            primary="Excluir"
+            primaryTypographyProps={{ color: 'error' }}
+          />
         </MenuItem>
       </Menu>
 
@@ -499,10 +578,7 @@ function Attachments() {
                   style={{ maxWidth: '100%', maxHeight: '70vh' }}
                 />
               ) : selectedFile.fileType.startsWith('video/') ? (
-                <video
-                  controls
-                  style={{ maxWidth: '100%', maxHeight: '70vh' }}
-                >
+                <video controls style={{ maxWidth: '100%', maxHeight: '70vh' }}>
                   <source src={selectedFile.url} type={selectedFile.fileType} />
                   Seu navegador não suporta a reprodução deste vídeo.
                 </video>
@@ -518,9 +594,13 @@ function Attachments() {
                 </iframe>
               ) : (
                 <Box sx={{ p: 3, textAlign: 'center' }}>
-                  <FileTypeIcon fileType={selectedFile.fileType} sx={{ fontSize: 60, mb: 2 }} />
+                  <FileTypeIcon
+                    fileType={selectedFile.fileType}
+                    sx={{ fontSize: 60, mb: 2 }}
+                  />
                   <Typography variant="body1" gutterBottom>
-                    Este tipo de arquivo não pode ser visualizado diretamente no navegador.
+                    Este tipo de arquivo não pode ser visualizado diretamente no
+                    navegador.
                   </Typography>
                   <Button
                     variant="contained"
@@ -558,13 +638,15 @@ function Attachments() {
         <DialogContent>
           <Box sx={{ mb: 3 }}>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Selecione os arquivos que deseja enviar. Você pode selecionar múltiplos arquivos.
+              Selecione os arquivos que deseja enviar. Você pode selecionar
+              múltiplos arquivos.
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Tamanho máximo: 50 MB por arquivo. Formatos suportados: JPG, PNG, PDF, DOC, DOCX, TXT, MP4, AVI.
+              Tamanho máximo: 50 MB por arquivo. Formatos suportados: JPG, PNG,
+              PDF, DOC, DOCX, TXT, MP4, AVI.
             </Typography>
           </Box>
-          
+
           {!uploading && (
             <Button
               variant="outlined"
@@ -582,17 +664,22 @@ function Attachments() {
               />
             </Button>
           )}
-          
+
           {filesToUpload.length > 0 && (
             <>
               <Typography variant="subtitle2" gutterBottom>
-                {filesToUpload.length} {filesToUpload.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'}
+                {filesToUpload.length}{' '}
+                {filesToUpload.length === 1
+                  ? 'arquivo selecionado'
+                  : 'arquivos selecionados'}
               </Typography>
               <List dense>
                 {filesToUpload.map((file, index) => (
                   <ListItem key={index}>
                     <ListItemIcon>
-                      <FileTypeIcon fileType={file.type || 'application/octet-stream'} />
+                      <FileTypeIcon
+                        fileType={file.type || 'application/octet-stream'}
+                      />
                     </ListItemIcon>
                     <ListItemText
                       primary={file.name}
@@ -603,11 +690,16 @@ function Attachments() {
               </List>
             </>
           )}
-          
+
           {uploading && (
             <Box sx={{ width: '100%', mt: 2 }}>
               <LinearProgress variant="determinate" value={uploadProgress} />
-              <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 1 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                align="center"
+                sx={{ mt: 1 }}
+              >
                 {uploadProgress}% Concluído
               </Typography>
             </Box>
@@ -629,14 +721,12 @@ function Attachments() {
       </Dialog>
 
       {/* Dialog de confirmação de exclusão */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-      >
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
         <DialogTitle>Confirmar Exclusão</DialogTitle>
         <DialogContent>
           <Typography variant="body1">
-            Tem certeza que deseja excluir o arquivo "{selectedAttachment?.fileName}"?
+            Tem certeza que deseja excluir o arquivo "
+            {selectedAttachment?.fileName}"?
           </Typography>
           <Typography variant="body2" color="error" sx={{ mt: 1 }}>
             Esta ação não pode ser desfeita.
