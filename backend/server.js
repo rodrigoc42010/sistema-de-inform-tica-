@@ -141,8 +141,6 @@ if (isProd) {
   );
 }
 app.use(helmet.referrerPolicy({ policy: 'no-referrer' }));
-app.use(helmet.crossOriginEmbedderPolicy());
-app.use(helmet.crossOriginOpenerPolicy());
 app.use(helmet.crossOriginResourcePolicy({ policy: 'same-site' }));
 app.use((req, res, next) => {
   res.setHeader(
