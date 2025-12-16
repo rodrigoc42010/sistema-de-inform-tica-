@@ -9,7 +9,7 @@
     "client": "npm start --prefix frontend",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "install-backend": "npm install",
-    "install-frontend": "npm install --prefix frontend",
+    "install-frontend": "npm install --legacy-peer-deps --prefix frontend",
     "install-all": "npm run install-backend && npm run install-frontend",
     "build": "npm run build --prefix frontend",
     "postinstall": "npm run install-frontend && npm run build --prefix frontend && node scripts/reset-db.js",
