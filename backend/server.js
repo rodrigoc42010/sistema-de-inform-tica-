@@ -21,6 +21,7 @@ const ticketRoutes = require('./src/presentation/routes/TicketRoutes');
 const userRoutes = require('./src/presentation/routes/UserRoutes');
 const adRoutes = require('./src/presentation/routes/AdRoutes');
 const paymentRoutes = require('./src/presentation/routes/PaymentRoutes');
+const serviceRoutes = require('./src/presentation/routes/ServiceRoutes');
 
 // Load env
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -58,6 +59,7 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/services', serviceRoutes);
 
 // Health Check
 app.get('/healthz', (req, res) => {

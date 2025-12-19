@@ -85,6 +85,17 @@ function LocalServices() {
         }
 
         const data = await response.json();
+        console.log('API Response:', data);
+
+        if (!data || !data.services) {
+          console.error(
+            'Invalid API response format. Expected { services: [...] } but got:',
+            data
+          );
+          setServices([]);
+          return;
+        }
+
         setServices(data.services || []);
         // Services fetched successfully
 

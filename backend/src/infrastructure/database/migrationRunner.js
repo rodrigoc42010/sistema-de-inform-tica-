@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { getPool } = require('../../db/pgClient');
+const { getPool } = require('../../../db/pgClient');
 const colors = require('colors');
 
 async function runMigrations() {
@@ -17,7 +17,7 @@ async function runMigrations() {
       );
     `);
 
-    const migrationsDir = path.join(__dirname, '../../../../migrations');
+    const migrationsDir = path.join(__dirname, '../../../migrations');
     const files = fs
       .readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.sql'))
