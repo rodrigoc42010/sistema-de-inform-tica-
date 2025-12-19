@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import api from '../../api/axios';
 
 // Material UI
 import {
@@ -30,9 +31,7 @@ import {
 import {
   ArrowBack as ArrowBackIcon,
   AttachFile as AttachFileIcon,
-  PhotoCamera as PhotoCameraIcon,
   Send as SendIcon,
-  VideoCall as VideoCallIcon,
 } from '@mui/icons-material';
 
 // Componentes
@@ -76,36 +75,14 @@ function NewTicket() {
   });
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Fetch technicians
   React.useEffect(() => {
     const fetchTechnicians = async () => {
       try {
-        // Assuming there is a way to get the token, usually from redux or localStorage
-        // Here we'll try to use the token from the auth state if available, or just rely on the cookie if the browser handles it.
-        // But the controller expects a Bearer token in the header usually, or maybe cookie.
-        // Let's check how other components do it. Usually axios instance has interceptors.
-        // For now, we'll try a direct fetch with the token from localStorage if it exists there, or just rely on cookies.
-
-        // Actually, let's look at how the app makes requests. It likely uses an axios instance.
-        // Since I don't see an axios instance imported, I'll use fetch with the token from localStorage 'user' object if present.
-
-        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-        const token = storedUser.token;
-
-        const response = await fetch('/api/users/technicians', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setTechnicians(data);
-        } else {
-          console.error('Failed to fetch technicians');
-        }
+        const { data } = await api.get('/api/users/technicians');
+        setTechnicians(data);
       } catch (error) {
         console.error('Error fetching technicians:', error);
       }
@@ -115,20 +92,15 @@ function NewTicket() {
   }, []);
 
   // Pré-seleção de técnico via query string
-  const location = useLocation?.() || null;
   React.useEffect(() => {
-    try {
-      const search = location?.search || window.location.search;
-      const params = new URLSearchParams(search);
-      const techId = params.get('technician');
-      if (techId) {
-        setSelectedTechnician(techId);
-        setTechnicianOption('manual');
-      }
-    } catch (e) {
-      // silenciar erros de parsing
+    const params = new URLSearchParams(location.search);
+    const techId = params.get('technician');
+    if (techId) {
+      setSelectedTechnician(techId);
+      setTechnicianOption('manual');
     }
   }, [location]);
+
   const handleBack = () => {
     navigate('/client/dashboard');
   };
@@ -163,28 +135,17 @@ function NewTicket() {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
 
-    const readers = files.map(
-      (file) =>
-        new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            resolve({
-              id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              name: file.name,
-              size: file.size,
-              type: file.type,
-              url: reader.result,
-              file,
-            });
-          };
-          reader.readAsDataURL(file);
-        })
-    );
+    const newAttachments = files.map((file) => ({
+      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      url: URL.createObjectURL(file), // Use object URL instead of Base64
+      file,
+    }));
 
-    Promise.all(readers).then((newAttachments) => {
-      setAttachments((prev) => [...prev, ...newAttachments]);
-      toast.success(`${files.length} arquivo(s) anexado(s) com sucesso!`);
-    });
+    setAttachments((prev) => [...prev, ...newAttachments]);
+    toast.success(`${files.length} arquivo(s) anexado(s) com sucesso!`);
   };
 
   const removeAttachment = (id) => {
@@ -193,7 +154,6 @@ function NewTicket() {
 
   const handleNext = () => {
     if (activeStep === 0) {
-      // Validar dados básicos do chamado
       if (!ticketData.title.trim()) {
         toast.error('O título do chamado é obrigatório');
         return;
@@ -205,7 +165,6 @@ function NewTicket() {
     }
 
     if (activeStep === 1) {
-      // Validar dados do dispositivo
       if (!ticketData.deviceType) {
         toast.error('O tipo de dispositivo é obrigatório');
         return;
@@ -227,47 +186,32 @@ function NewTicket() {
     setLoading(true);
 
     try {
-      // Preparar dados para envio
-      const ticketPayload = {
-        title: ticketData.title,
-        description: ticketData.description,
-        priority: ticketData.priority,
-        deviceType: ticketData.deviceType,
-        deviceBrand: ticketData.deviceBrand,
-        deviceModel: ticketData.deviceModel,
-        serialNumber: ticketData.serialNumber,
-        problemCategory: ticketData.problemCategory,
-        attachments: ticketData.attachments || [],
-        serviceItems: ticketData.serviceItems || [],
-        initialDiagnosis: ticketData.initialDiagnosis,
-        pickupRequested: ticketData.pickupRequested,
-        pickupAddress: ticketData.pickupAddress,
-      };
+      const formData = new FormData();
 
-      // Se técnico foi selecionado manualmente, adicionar ao payload
+      formData.append('title', ticketData.title);
+      formData.append('description', ticketData.description);
+      formData.append('priority', ticketData.priority);
+      formData.append('deviceType', ticketData.deviceType);
+      formData.append('deviceBrand', ticketData.deviceBrand);
+      formData.append('deviceModel', ticketData.deviceModel);
+      formData.append('serialNumber', ticketData.serialNumber);
+      formData.append('pickupRequested', ticketData.pickupRequired);
+
       if (technicianOption === 'manual' && selectedTechnician) {
-        ticketPayload.technician = selectedTechnician;
+        formData.append('technicianId', selectedTechnician);
       }
 
-      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const token = storedUser.token;
-
-      const response = await fetch('http://localhost:5001/api/tickets', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(ticketPayload),
+      attachments.forEach((attachment) => {
+        if (attachment.file) {
+          formData.append('attachments', attachment.file);
+        }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erro ao criar chamado');
-      }
-
-      await response.json();
-      // Ticket created successfully
+      await api.post('/api/tickets', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
       setLoading(false);
       toast.success('Chamado criado com sucesso!');
@@ -275,7 +219,10 @@ function NewTicket() {
     } catch (error) {
       setLoading(false);
       console.error('Erro ao criar chamado:', error);
-      toast.error(error.message || 'Erro ao criar chamado. Tente novamente.');
+      toast.error(
+        error.response?.data?.message ||
+          'Erro ao criar chamado. Tente novamente.'
+      );
     }
   };
 
@@ -445,9 +392,8 @@ function NewTicket() {
                     required={technicianOption === 'manual'}
                   >
                     {technicians.map((tech) => (
-                      <MenuItem key={tech._id} value={tech._id}>
-                        {tech.name} - {tech.specialties.join(', ')} -{' '}
-                        {tech.distance} km
+                      <MenuItem key={tech.id} value={tech.id}>
+                        {tech.name}
                       </MenuItem>
                     ))}
                   </Select>
@@ -479,16 +425,6 @@ function NewTicket() {
                   />
                 </RadioGroup>
               </FormControl>
-              {ticketData.pickupRequired && (
-                <Typography
-                  variant="body2"
-                  color="textSecondary"
-                  sx={{ mt: 1 }}
-                >
-                  Nota: Será aplicada uma taxa de deslocamento que varia de
-                  acordo com a distância.
-                </Typography>
-              )}
             </Grid>
           </Grid>
         );
@@ -499,11 +435,6 @@ function NewTicket() {
               <Typography variant="h6" gutterBottom>
                 Anexos
               </Typography>
-              <Typography variant="body2" color="textSecondary" paragraph>
-                Adicione fotos ou vídeos que possam ajudar o técnico a entender
-                melhor o problema.
-              </Typography>
-
               <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
                 <input
                   accept="image/*,video/*,application/pdf"
@@ -522,12 +453,6 @@ function NewTicket() {
                     Anexar Arquivos
                   </Button>
                 </label>
-                <Button variant="outlined" startIcon={<PhotoCameraIcon />}>
-                  Tirar Foto
-                </Button>
-                <Button variant="outlined" startIcon={<VideoCallIcon />}>
-                  Gravar Vídeo
-                </Button>
               </Box>
 
               {attachments.length > 0 ? (
@@ -578,9 +503,6 @@ function NewTicket() {
                         >
                           {attachment.name}
                         </Typography>
-                        <Typography variant="caption" color="textSecondary">
-                          {(attachment.size / 1024).toFixed(2)} KB
-                        </Typography>
                         <Button
                           size="small"
                           color="error"
@@ -602,69 +524,6 @@ function NewTicket() {
                   Nenhum anexo adicionado
                 </Typography>
               )}
-
-              <Divider sx={{ my: 3 }} />
-
-              <Typography variant="h6" gutterBottom>
-                Resumo do Chamado
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2">Título:</Typography>
-                  <Typography variant="body2" paragraph>
-                    {ticketData.title}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2">Prioridade:</Typography>
-                  <Typography variant="body2" paragraph>
-                    {
-                      priorityOptions.find(
-                        (opt) => opt.value === ticketData.priority
-                      )?.label
-                    }
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2">Descrição:</Typography>
-                  <Typography variant="body2" paragraph>
-                    {ticketData.description}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2">Dispositivo:</Typography>
-                  <Typography variant="body2" paragraph>
-                    {ticketData.deviceType} {ticketData.deviceBrand}{' '}
-                    {ticketData.deviceModel}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2">Técnico:</Typography>
-                  <Typography variant="body2" paragraph>
-                    {technicianOption === 'auto'
-                      ? 'Encontrar automaticamente'
-                      : technicians.find(
-                          (tech) => tech._id === selectedTechnician
-                        )?.name || 'Não selecionado'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2">
-                    Retirada do equipamento:
-                  </Typography>
-                  <Typography variant="body2" paragraph>
-                    {ticketData.pickupRequired
-                      ? 'Sim, técnico deve buscar'
-                      : 'Não, cliente levará até o técnico'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2">Anexos:</Typography>
-                  <Typography variant="body2" paragraph>
-                    {attachments.length} arquivo(s)
-                  </Typography>
-                </Grid>
-              </Grid>
             </Grid>
           </Grid>
         );

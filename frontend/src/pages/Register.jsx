@@ -3,7 +3,6 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { register, reset } from '../features/auth/authSlice';
-import axios from '../api/axios';
 
 // Material UI
 import {
@@ -382,42 +381,10 @@ function Register() {
     // Submit registration
     dispatch(register(userData))
       .unwrap()
-      .then(async (u) => {
-        try {
-          const token = u?.token || localStorage.getItem('token');
-          if (token && userType === 'technician') {
-            try {
-              await axios.post(
-                '/api/users/upgrade-to-technician',
-                { technician: technicianData },
-                { headers: { Authorization: `Bearer ${token}` } }
-              );
-            } catch (e) {}
-          }
-          if (token) {
-            try {
-              const me = await axios.get('/api/users/me', {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              const role = me?.data?.role || u?.role || userType;
-              navigate(
-                role === 'technician'
-                  ? '/technician/dashboard'
-                  : '/client/dashboard'
-              );
-              return;
-            } catch {}
-          }
-          navigate(
-            (u?.role || userType) === 'technician'
-              ? '/technician/dashboard'
-              : '/client/dashboard'
-          );
-        } catch (err) {
-          toast.error(
-            typeof err === 'string' ? err : err?.message || 'Falha ao registrar'
-          );
-        }
+      .then(() => {
+        toast.success('Registro realizado com sucesso!');
+        // The register action should set the user in state,
+        // and the useEffect will handle navigation based on role.
       })
       .catch((err) => {
         toast.error(
