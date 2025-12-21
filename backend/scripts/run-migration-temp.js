@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
-const { getPool } = require('../db/pgClient');
+const { getPool } = require('../src/infrastructure/database/pgClient');
 
 async function runMigration() {
   const migrationPath = path.join(

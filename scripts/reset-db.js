@@ -1,11 +1,13 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const { getPool } = require('../backend/db/pgClient');
+const { getPool } = require('../backend/src/infrastructure/database/pgClient');
 
 async function run() {
   try {
     if (process.env.DB_RESET_ON_DEPLOY !== 'true') {
-      console.log('DB reset desativado. Defina DB_RESET_ON_DEPLOY=true para executar.');
+      console.log(
+        'DB reset desativado. Defina DB_RESET_ON_DEPLOY=true para executar.'
+      );
       return;
     }
     const pool = getPool();
@@ -28,7 +30,7 @@ async function run() {
     } finally {
       client.release();
     }
-    const initPostgres = require('../backend/config/pg');
+    const initPostgres = require('../backend/src/infrastructure/database/pg');
     const ok = await initPostgres();
     if (!ok) throw new Error('Falha ao recriar estruturas');
     console.log('Banco redefinido e reconfigurado com sucesso.');

@@ -1,4 +1,4 @@
-const { getPool } = require('../backend/db/pgClient');
+const { getPool } = require('../backend/src/infrastructure/database/pgClient');
 
 async function checkTickets() {
   try {
