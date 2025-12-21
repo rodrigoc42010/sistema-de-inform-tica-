@@ -7,5 +7,6 @@ router.get('/technicians', protect, userController.getTechnicians);
 router.get('/technicians/nearby', protect, userController.getNearbyTechnicians);
 router.get('/technicians/top', protect, userController.getTopTechnicians);
 router.get('/profile', protect, userController.getProfile);
+router.put('/profile', protect, userController.updateProfile);
 
 module.exports = router;

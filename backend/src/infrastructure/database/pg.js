@@ -10,7 +10,7 @@ async function initPostgres() {
       return false;
     }
 
-    const { getPool } = require('../db/pgClient');
+    const { getPool } = require('./pgClient');
     const pool = getPool();
 
     const client = await pool.connect();

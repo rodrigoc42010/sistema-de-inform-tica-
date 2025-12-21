@@ -1,4 +1,4 @@
-const { getPool } = require('../../../db/pgClient');
+const { getPool } = require('./pgClient');
 const Payment = require('../../domain/Payment');
 
 class PostgresPaymentRepository {

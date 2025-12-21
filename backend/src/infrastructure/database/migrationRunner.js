@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { getPool } = require('../../../db/pgClient');
+const { getPool } = require('./pgClient');
 const colors = require('colors');
 
 async function runMigrations() {

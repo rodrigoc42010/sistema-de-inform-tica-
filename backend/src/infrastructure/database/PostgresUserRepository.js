@@ -1,4 +1,4 @@
-const { getPool } = require('../../../db/pgClient');
+const { getPool } = require('./pgClient');
 const User = require('../../domain/User');
 
 class PostgresUserRepository {
@@ -49,20 +49,26 @@ class PostgresUserRepository {
         phone = $2, 
         address_street = $3, 
         address_number = $4, 
-        address_city = $5, 
-        address_state = $6, 
-        address_zipcode = $7, 
+        address_complement = $5,
+        address_neighborhood = $6,
+        address_city = $7, 
+        address_state = $8, 
+        address_zipcode = $9, 
+        profile_image_url = $10,
         updated_at = NOW() 
-       WHERE id = $8 
+       WHERE id = $11 
        RETURNING *`,
       [
         user.name,
         user.phone,
         user.address.street,
         user.address.number,
+        user.address.complement,
+        user.address.neighborhood,
         user.address.city,
         user.address.state,
         user.address.zipcode,
+        user.profileImageUrl,
         user.id,
       ]
     );
@@ -81,9 +87,11 @@ class PostgresUserRepository {
       address: {
         street: row.address_street,
         number: row.address_number,
+        complement: row.address_complement,
+        neighborhood: row.address_neighborhood,
         city: row.address_city,
         state: row.address_state,
-        zipcode: row.address_zipcode,
+        zipCode: row.address_zipcode,
       },
       profileImageUrl: row.profile_image_url,
       emailVerified: row.email_verified,

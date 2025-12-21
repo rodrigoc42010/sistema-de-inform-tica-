@@ -1,5 +1,5 @@
 const technicianRepository = require('../infrastructure/database/PostgresTechnicianRepository');
-const placesService = require('../../services/placesService');
+const placesService = require('../infrastructure/external/PlacesService');
 
 class ListNearbyTechnicians {
   async execute({ lat, lng, radiusKm = 10 }) {

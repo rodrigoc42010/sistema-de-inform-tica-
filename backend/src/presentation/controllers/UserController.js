@@ -1,6 +1,7 @@
 const listTechnicians = require('../../application/ListTechnicians');
 const listNearbyTechnicians = require('../../application/ListNearbyTechnicians');
 const listTopTechnicians = require('../../application/ListTopTechnicians');
+const updateProfile = require('../../application/UpdateProfile');
 const asyncHandler = require('express-async-handler');
 
 class UserController {
@@ -31,6 +32,11 @@ class UserController {
 
   getProfile = asyncHandler(async (req, res) => {
     res.status(200).json(req.user);
+  });
+
+  updateProfile = asyncHandler(async (req, res) => {
+    const updatedUser = await updateProfile.execute(req.user.id, req.body);
+    res.status(200).json(updatedUser);
   });
 }
 

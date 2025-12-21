@@ -60,6 +60,9 @@ class RegisterUser {
         name: user.name,
         email: user.email,
         role: user.role,
+        phone: user.phone,
+        address: user.address,
+        profileImage: user.profileImageUrl,
       };
     } catch (err) {
       await client.query('ROLLBACK');

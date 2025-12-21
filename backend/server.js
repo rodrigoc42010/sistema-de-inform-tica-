@@ -7,13 +7,16 @@ const dotenv = require('dotenv');
 const colors = require('colors');
 
 // Infrastructure
-const connectDB = require('./config/db');
+const connectDB = require('./src/infrastructure/database/dbConnection');
 const runMigrations = require('./src/infrastructure/database/migrationRunner');
 const redisService = require('./src/infrastructure/external/RedisService');
 
 // Middlewares
 const errorHandler = require('./src/presentation/middlewares/ErrorMiddleware');
-const { maskIP, getRequestIP } = require('./middleware/auditLogger');
+const {
+  maskIP,
+  getRequestIP,
+} = require('./src/presentation/middlewares/AuditLogger');
 
 // Routes
 const authRoutes = require('./src/presentation/routes/AuthRoutes');
@@ -31,11 +34,11 @@ const app = express();
 // Security Middlewares
 app.use(helmet());
 app.use(cookieParser());
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 // CORS Configuration
-const { corsOrigins } = require('./config/appConfig');
+const { corsOrigins } = require('./src/infrastructure/config/appConfig');
 app.use(
   cors({
     origin: corsOrigins,

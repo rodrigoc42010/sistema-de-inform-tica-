@@ -2,7 +2,7 @@ const authenticateUser = require('../../application/AuthenticateUser');
 const registerUser = require('../../application/RegisterUser');
 const tokenService = require('../../infrastructure/external/TokenService');
 const userRepository = require('../../infrastructure/database/PostgresUserRepository');
-const { UnauthorizedError } = require('../utils/httpErrors');
+const { UnauthorizedError } = require('../../utils/httpErrors');
 const asyncHandler = require('express-async-handler');
 
 class AuthController {

@@ -1,6 +1,6 @@
 const tokenService = require('../../infrastructure/external/TokenService');
 const userRepository = require('../../infrastructure/database/PostgresUserRepository');
-const { UnauthorizedError } = require('../utils/httpErrors');
+const { UnauthorizedError } = require('../../utils/httpErrors');
 const asyncHandler = require('express-async-handler');
 
 const protect = asyncHandler(async (req, res, next) => {
