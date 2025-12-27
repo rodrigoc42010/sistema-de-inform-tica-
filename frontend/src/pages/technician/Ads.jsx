@@ -257,6 +257,7 @@ const TechnicianAds = () => {
     setEditAd((prev) => ({ ...prev, [name]: value }));
   };
 
+  /*
   const handleFileSelectEdit = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -276,10 +277,11 @@ const TechnicianAds = () => {
         );
         setSnackOpen(true);
       } finally {
-        setUploadingEdit(false);
+        // setUploadingEdit(false);
       }
     })();
   };
+  */
 
   const saveEdit = async () => {
     if (!editAd?._id) return;
