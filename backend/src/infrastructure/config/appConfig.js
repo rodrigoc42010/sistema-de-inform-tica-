@@ -12,7 +12,7 @@ const corsOrigins = isProduction
   ? prodOrigins.length ? prodOrigins : (process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [])
   : [frontendUrl];
 
-const backupPath = path.join(__dirname, '../../backups');
+const backupPath = path.join(__dirname, '../../../backups');
 
 const rateLimits = {
   login: { windowMs: 15 * 60 * 1000, max: 10 },

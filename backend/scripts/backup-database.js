@@ -1,7 +1,7 @@
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { backupPath } = require('../config/appConfig');
+const { backupPath } = require('../src/infrastructure/config/appConfig');
 
 const BACKUP_DIR = backupPath;
 const MAX_BACKUPS = 7;
@@ -43,7 +43,10 @@ function cleanOldBackups() {
     const files = fs
       .readdirSync(BACKUP_DIR)
       .filter((f) => f.endsWith('.sql'))
-      .map((f) => ({ name: f, time: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs }))
+      .map((f) => ({
+        name: f,
+        time: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs,
+      }))
       .sort((a, b) => b.time - a.time);
     if (files.length > MAX_BACKUPS) {
       const toDelete = files.slice(MAX_BACKUPS);
