@@ -152,7 +152,7 @@ const TechnicianAds = () => {
   const [message, setMessage] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [editAd, setEditAd] = useState(null);
-  const [uploadingEdit, setUploadingEdit] = useState(false);
+  // const [uploadingEdit, setUploadingEdit] = useState(false); // Unused
 
   const [snackOpen, setSnackOpen] = useState(false);
 
